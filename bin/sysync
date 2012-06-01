@@ -200,7 +200,8 @@ sub _sync_host
 {
     my ($host, $address) = @_;
 
-    my @rsync = ('rsync', '-zva', '-e', 'ssh -carcfour -i /var/sysync/keys/sysync_rsa');
+    my @rsync = ('rsync', '-zva', '--copy-unsafe-links',
+                 '-e', 'ssh -carcfour -i /var/sysync/keys/sysync_rsa');
     push @rsync, "$stagedir/$host/";
     push @rsync, "$address:/";
 
