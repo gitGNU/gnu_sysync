@@ -11,7 +11,7 @@ use IPC::Open3;
 use YAML;
 
 my $sysdir = '/var/sysync';
-my $stagedir = '/var/sysync/.stage';
+my $stagedir = '/var/sysync/stage';
 
 my $editor = $ENV{EDITOR} || 'vi';
 
@@ -291,6 +291,8 @@ sub daemon
 
     _log("Starting sysync daemon.");
 
+    $0 = 'sysync-daemon';
+
     while (1)
     {
         # grab list of hosts along with image name
@@ -319,10 +321,40 @@ sub daemon
                 _log("Creating $stagedir/$host/etc");
             }
 
+            unless (-d "$stagedir/$host/etc/ssh")
+            {
+                mkdir "$stagedir/$host/etc/ssh";
+                chmod 0744, "$stagedir/$host/etc/ssh";
+                chown 0, 0, "$stagedir/$host/etc/ssh";
+                _log("Creating $stagedir/$host/etc/ssh");
+            }
+
+
+            unless (-d "$stagedir/$host/etc/ssh/authorized_keys")
+            {
+                mkdir "$stagedir/$host/etc/ssh/authorized_keys";
+                chmod 0744, "$stagedir/$host/etc/ssh/authorized_keys";
+                chown 0, 0, "$stagedir/$host/etc/ssh/authorized_keys";
+                _log("Creating $stagedir/$host/etc/ssh/authorized_keys");
+            }
+
             # write host files
             my $ent_data = _get_host_ent($host);
 
             next unless $ent_data;
+
+            for my $key (@{ $ent_data->{ssh_keys} || [] })
+            {
+                my $username = $key->{username};
+                my $uid      = $key->{uid};
+                my $text     = $key->{keys};
+
+                if (_write_file_contents("$stagedir/$host/etc/ssh/authorized_keys/$username", $text))
+                {
+                    chmod 0600, "$stagedir/$host/etc/ssh/authorized_keys/$username";
+                    chown $uid, 0, "$stagedir/$host/etc/ssh/authorized_keys/$username";
+                }
+            }
 
             if (_write_file_contents("$stagedir/$host/etc/passwd", $ent_data->{passwd}))
             {
@@ -459,10 +491,28 @@ sub _get_host_ent
     my $shadow = join("\n", map { _generate_user_line($_, 'shadow') } @users) . "\n";
     my $group  = join("\n", map { _generate_group_line($_) } @groups) . "\n";
 
+    my @ssh_keys;
+    for my $user (@users)
+    {
+        next unless $user->{ssh_keys};
+
+        my $keys = join("\n", @{$user->{ssh_keys} || []});
+        $keys .= "\n" if $keys;
+
+        next unless $keys;
+
+        push @ssh_keys, {
+            username => $user->{username},
+            keys     => $keys,
+            uid      => $user->{uid},
+        };
+    }
+
     return {
-        passwd => $passwd,
-        shadow => $shadow,
-        group  => $group,
+        passwd   => $passwd,
+        shadow   => $shadow,
+        group    => $group,
+        ssh_keys => \@ssh_keys,
     };
 }
 
@@ -637,12 +687,6 @@ sub _write_new_host_template
 #     password: '$6$928b679b70731fc7$OjB.vI0hI4PWC9ObsudW3ITZMBjo7Rfs6Dd5vQ80XZM0A6NU6EQqIVQAI3T90T5Bz3K9Vfha0cp176IAHaNQQ.'
 #     ssh_keys:
 #        - here
-#files:
-#   - remote_path: '/etc/foo'
-#     file: 'defaults/foo'
-#     chmod: 777
-#     owner: root
-#     group: root
 # only import users from the following groups
 # use all for all users
 user_groups:
@@ -822,11 +866,12 @@ sub usage
     warn "   --addhost=[host]\n";
     warn "   --edithost=[host]\n";
     warn "   --delhost=[host]\n";
-    warn "   --edithosts | edit hosts.conf file\n";
+    warn "   --edithosts (edit hosts.conf file)\n";
     warn "   --mkpasswd (return password via stdout)\n";
     warn "   --passwd=[user] (set a user's password)\n";
     warn "   --usersetpassword=[user] allow a user to set their own password\n";
     warn "   --usersetpasswordauthkeys returns authorized_keys file for all users to set their password\n";
+    warn "   --daemon (run in daemon mode)\n";
 
 }
 

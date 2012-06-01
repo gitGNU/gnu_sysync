@@ -17,11 +17,12 @@ sub main
         #die "sysync is already installed\n" if -d $sysdir;
 
     mkdir("$sysdir");
+    chmod 700, "$sysdir";
     mkdir("$sysdir/users");
     mkdir("$sysdir/groups");
     mkdir("$sysdir/hosts");
     mkdir("$sysdir/files");
-    mkdir("$sysdir/.stage/");
+    mkdir("$sysdir/stage/");
     mkdir("$sysdir/keys");
     chmod 700, "$sysdir/keys";
 
