@@ -1,0 +1,15 @@
+
+
+User files are in  /var/sysync/users/$USERNAME.conf
+
+Users are defined as such:
+
+username: mjflick
+uid: 1001
+fullname: mjflick
+homedir: /home/mjflick
+shell: /bin/bash
+ssh_keys:
+   - "ssh key here"
+
+Hosts are in /var/syssync/hosts/

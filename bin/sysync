@@ -1,0 +1,876 @@
+#!/usr/bin/perl
+use strict;
+
+use File::Copy;
+use Digest::MD5 qw(md5_hex);
+use Term::ReadKey;
+use Time::HiRes 'usleep';
+use POSIX ":sys_wait_h";
+
+use IPC::Open3;
+use YAML;
+
+my $sysdir = '/var/sysync';
+my $stagedir = '/var/sysync/.stage';
+
+my $editor = $ENV{EDITOR} || 'vi';
+
+die "sysync may only be ran as root\n" unless $< == 0;
+
+open(LOG, ">/dev/null");
+*LOG = *STDERR if $ENV{DEBUG};
+
+sub main
+{
+    # grab options
+    my $options = _parse_options();
+
+    if (my $username = $options->{adduser})
+    {
+        die "Username must be specified\n" if $username eq '1';
+        die "User $username already exists\n" if -e "$sysdir/users/$username.conf";
+        slock();
+        my $uid = getnextuid();
+        incrementuid();
+        _write_new_user_template($username, $uid);
+
+        edit_yaml_file("$sysdir/users/$username.conf") if $options->{interactive};
+        print "User $username added\n";
+        sunlock();
+    }
+    elsif (my $username = $options->{edituser})
+    {
+        die "Username must be specified\n" if $username eq '1';
+        die "User $username does not exists\n" unless -e "$sysdir/users/$username.conf";
+        slock();
+        edit_yaml_file("$sysdir/users/$username.conf");
+        sunlock();
+    }
+    elsif (my $username = $options->{deluser})
+    {
+        die "Username must be specified\n" if $username eq '1';
+        die "User $username does not exists\n" unless -e "$sysdir/users/$username.conf";
+        slock();
+        unlink("$sysdir/users/$username.conf");
+        print "$username deleted\n";
+        sunlock();
+    }
+    elsif (my $group = $options->{addgroup})
+    {
+        die "Group must be specified\n" if $group eq '1';
+        die "'all' is an invalid group name\n" if $group eq 'all';
+        die "Group $group already exists\n" if -e "$sysdir/groups/$group.conf";
+        slock();
+        my $gid = getnextuid();
+        incrementuid();
+        _write_new_group_template($group, $gid);
+
+        edit_yaml_file("$sysdir/groups/$group.conf") if $options->{interactive};
+        print "Group $group added\n";
+        sunlock();
+    }
+    elsif (my $group = $options->{editgroup})
+    {
+        die "Group must be specified\n" if $group eq '1';
+        die "Group $group does not exists\n" unless -e "$sysdir/groups/$group.conf";
+        slock();
+        edit_yaml_file("$sysdir/groups/$group.conf");
+        sunlock();
+    }
+    elsif (my $group = $options->{delgroup})
+    {
+        die "Group must be specified\n" if $group eq '1';
+        die "Group $group does not exists\n" unless -e "$sysdir/groups/$group.conf";
+        slock();
+        unlink("$sysdir/groups/$group.conf");
+        print "$group deleted\n";
+        sunlock();
+    }
+    elsif (my $host = $options->{addhost})
+    {
+        die "Host must be specified\n" if $host eq '1';
+        die "Host $host already exists\n" if -e "$sysdir/hosts/$host.conf";
+        slock();
+
+        _write_new_host_template($host);
+
+        edit_yaml_file("$sysdir/hosts/$host.conf") if $options->{interactive};
+        print "Host $host added\n";
+        sunlock();
+    }
+    elsif (my $host = $options->{edithost})
+    {
+        die "Host must be specified\n" if $host eq '1';
+        die "Host $host does not exists\n" unless -e "$sysdir/hosts/$host.conf";
+        slock();
+        edit_yaml_file("$sysdir/hosts/$host.conf");
+        sunlock();
+    }
+    elsif (my $host = $options->{delhost})
+    {
+        die "Host must be specified\n" if $host eq '1';
+        die "Host $host does not exists\n" unless -e "$sysdir/hosts/$host.conf";
+        slock();
+        unlink("$sysdir/hosts/$host.conf");
+        print "$host deleted\n";
+        sunlock();
+    }
+    elsif ($options->{edithosts})
+    {
+        slock();
+        edit_yaml_file("$sysdir/hosts.conf");
+        sunlock();
+    }
+    elsif ($options->{mkpasswd})
+    {
+        print _prompt_for_password() . "\n";
+    }
+    elsif (my $username = $options->{passwd})
+    {
+        if ($options->{passwd} eq '1')
+        {
+            die "Please specify a username\n";
+        }
+        else
+        {
+            die "user does not exist\n" unless -e "$sysdir/users/$username.conf";
+            my $passwd = _prompt_for_password();
+            open(F, ">$sysdir/users/$username.passwd");
+            print F $passwd;
+            close(F);
+            print "Successfully updated password for $username\n";
+        }
+
+    }
+    elsif (my $username = $options->{usersetpassword})
+    {
+        die "user does not exist\n" unless -e "$sysdir/users/$username.conf";
+
+        print "Hello $username!\n\n";
+
+        print "Please enter your password: ";
+        ReadMode('noecho'); # don't echo
+        chomp(my $password = <STDIN>);
+        ReadMode(0);        # back to normal
+        print "\n";
+        my $current_pw = _get_file_contents("$sysdir/users/$username.passwd");
+
+        if (crypt($password, $current_pw) eq $current_pw)
+        {
+            my $passwd = _prompt_for_password();
+
+            open(F, ">$sysdir/users/$username.passwd");
+            print F $passwd;
+            close(F);
+            print "Successfully updated password for $username\n";            
+        }
+        else
+        {
+            die "Incorrect password\n";
+        }
+    }
+    elsif ($options->{usersetpasswordauthkeys})
+    {
+        my $out = '';
+
+        for my $username (_grab_all_users())
+        {
+            my $user = Load(_get_file_contents("$sysdir/users/$username.conf"));
+            for my $key (@{ $user->{ssh_keys} || [] })
+            {
+                $out .= qq[command="sudo /usr/sbin/sysync --usersetpassword=$username" $key\n];
+            }
+        }
+
+        print $out;
+    }
+    elsif ($options->{daemon})
+    {
+        daemon();
+    }
+    else
+    {
+        usage();
+    }
+}
+
+sub _log { my $lt=localtime; print "$lt: $_[0]\n" }
+
+sub _sync_host
+{
+    my ($host, $address) = @_;
+
+    my @rsync = ('rsync', '-zva', '-e', 'ssh -carcfour -i /var/sysync/keys/sysync_rsa');
+    push @rsync, "$stagedir/$host/";
+    push @rsync, "$address:/";
+
+    my $r = _system(@rsync);
+
+    if ($r->{status} and $r->{status} > 0)
+    {
+        _log("$host => $address fail:\n");
+        _log($r->{stderr});
+    }
+    else
+    {
+        my @lines = split("\n", $r->{stdout});
+
+        my @out_lines;
+        for (@lines)
+        {
+            $_ =~ s/[\n\r]//g;
+            next if $_ =~ /^sending /;
+            next if $_ =~ /^sent /;
+            next if $_ =~ /^total /;
+
+            push @out_lines, "$address: $_" if $_;
+        }
+
+        @out_lines = grep { $_ } @out_lines;
+
+        if (@out_lines)
+        {
+            my $files = join("\n", @out_lines);
+            _log("rsyncing [$host => $address]\n$files");
+        }
+    } 
+
+}
+
+sub _system
+{
+    my @command = @_;
+    my($wtr, $rdr, $err);
+    my $pid = open3($wtr, $rdr, $err, @command);
+    close($wtr);
+    waitpid( $pid, 0 );
+
+    my $out = '';
+    $out .= $_ while (<$rdr>);
+
+    my $error = '';
+    $error .= $_ while (<$err>);
+
+    if ($ENV{VERBOSE})
+    {
+        my $s = join(' ', @command);
+        warn "=== executing: $s ===\n";
+        warn "=== stdout ==\n";
+        warn "$out\n";
+        warn "=== error ==\n";
+        warn "$error\n";
+        warn "=== end execution ===\n";
+    }
+
+    return {
+        status => $?,
+        stderr => $error,
+        stdout => $out,
+    };
+}
+
+my $current_workers = 0;
+
+$SIG{CHLD} = \&REAPER;
+
+sub REAPER
+{
+    my $kid;
+
+    while (($kid = waitpid(-1, &WNOHANG)) > 0)
+    { 
+
+    }
+    $current_workers--;
+    $SIG{CHLD} = \&REAPER;
+}
+
+sub daemon
+{
+    open(LOG, ">>/var/log/sysync.log") unless $ENV{DEBUG};
+
+    _log("Starting sysync daemon.");
+
+    while (1)
+    {
+        # grab list of hosts along with image name
+        my $hosts = Load(_get_file_contents("$sysdir/hosts.conf")) || {};
+
+        # first, build staging directories
+        my @hosts = keys %{ $hosts->{hosts} || {} };
+
+        for my $host (@hosts)
+        {
+            next unless -e "$sysdir/hosts/$host.conf";
+
+            unless (-d "$stagedir/$host")
+            {
+                mkdir "$stagedir/$host";
+                chmod 0755, "$stagedir/$host";
+                chown 0, 0, "$stagedir/$host";
+                _log("Creating $stagedir/$host");
+            }
+
+            unless (-d "$stagedir/$host/etc")
+            {
+                mkdir "$stagedir/$host/etc";
+                chmod 0755, "$stagedir/$host/etc";
+                chown 0, 0, "$stagedir/$host/etc";
+                _log("Creating $stagedir/$host/etc");
+            }
+
+            # write host files
+            my $ent_data = _get_host_ent($host);
+
+            next unless $ent_data;
+
+            _write_file_contents("$stagedir/$host/etc/passwd", $ent_data->{passwd});
+            chmod 0644, "$stagedir/$host/etc/passwd";
+            chown 0, 0, "$stagedir/$host/etc/passwd";
+
+            _write_file_contents("$stagedir/$host/etc/group", $ent_data->{group});
+            chmod 0644, "$stagedir/$host/etc/group";
+            chown 0, 0, "$stagedir/$host/etc/group";
+
+            _write_file_contents("$stagedir/$host/etc/shadow", $ent_data->{shadow});
+            chmod 0640, "$stagedir/$host/etc/shadow";
+            chown 0, 42, "$stagedir/$host/etc/shadow";
+        }
+
+        # map hosts to addresses
+        my @host_addresses;
+
+        for my $host (@hosts)
+        {
+            for my $address (@{ $hosts->{hosts}{$host} || [] })
+            {
+                push @host_addresses, { 
+                    host => $host,
+                    address => $address,
+                };
+            }
+        }
+
+        for my $h (@host_addresses)
+        {
+            _sync_host($h->{host}, $h->{address});
+        }
+
+        # sync every host
+        #for my $
+
+        sleep(5);
+    }
+        
+        # while ($current_workers >= $max_workers) { usleep($utimeout) };
+
+        # if (fork())
+        # {
+        #     $current_workers++;
+        # }
+        # else
+        # {
+        #     $0 = 'sysync [worker: ]';
+
+        #             $current_workers = 0; # child has no workers
+
+        #             my %args = (ssl_params => \%ssl_params);
+
+        #             if ($sock == $ssl_sock)
+        #             {
+        #                 $args{ssl} = 1;
+        #                 exit unless IO::Socket::SSL->start_SSL($new_sock, %ssl_params);
+        #             }
+
+        #             $class->handle_session($new_sock, %args);
+        #             exit(0);
+        #         }
+
+
+}
+
+
+sub _generate_user_line
+{
+    my ($user, $what) = @_;
+
+    my $gid      = $user->{gid} || $user->{uid};
+    my $fullname = $user->{fullname} || $user->{username};
+
+    my $password = '*';
+
+    if ($user->{password})
+    {
+        $password = $user->{password};
+    }
+    else
+    {
+        my $p = _get_file_contents("$sysdir/users/$user->{username}.passwd");
+
+        $password = $p if $p;
+    }
+
+    my $line = q[];
+    if ($what eq 'passwd')
+    {
+        $line = join(':', $user->{username}, 'x', $user->{uid}, $gid,
+                     $fullname, $user->{homedir}, $user->{shell});
+    }
+    elsif ($what eq 'shadow')
+    {
+        my $password = $user->{disabled} ? '!' : $password;
+        $line = join(':', $user->{username}, $password, 15198, 0, 99999, 7, '','','');
+    }
+
+    return $line;
+}
+
+sub _generate_group_line
+{
+    my $group    = shift;
+
+    my $users = join(',', @{$group->{users} || []}) || '';
+    return join(':', $group->{groupname}, 'x', $group->{gid}, $users);
+}
+
+
+### 
+### _grab_host_users
+###
+
+sub _get_host_ent
+{
+    my $host = shift;
+
+    return unless "$sysdir/hosts/$host.conf";
+
+    
+    my $data = _grab_host_users_groups($host);
+    my @users = @{$data->{users} || []};
+    my @groups = @{$data->{groups} || []};
+
+    my $passwd = join("\n", map { _generate_user_line($_, 'passwd') } @users) . "\n";
+    my $shadow = join("\n", map { _generate_user_line($_, 'shadow') } @users) . "\n";
+    my $group  = join("\n", map { _generate_group_line($_) } @groups) . "\n";
+
+    return {
+        passwd => $passwd,
+        shadow => $shadow,
+        group  => $group,
+    };
+}
+
+sub _grab_host_users_groups
+{
+    my $host = shift;
+
+    my $default_host_config = {};
+    if (-e "$sysdir/hosts/default.conf")
+    {
+        $default_host_config = Load(_get_file_contents("$sysdir/hosts/default.conf"));
+    }
+
+    my $host_config = {};
+    if (-e "$sysdir/hosts/$host.conf")
+    {
+        $host_config = Load(_get_file_contents("$sysdir/hosts/$host.conf"));
+    }
+
+    my (%host_users, %host_groups);
+    # merge default users and host users via config
+
+    $host_users{$_->{username}} = $_ for (@{ $default_host_config->{users} || [ ] });
+    $host_users{$_->{username}} = $_ for (@{ $host_config->{users} || [ ] });
+
+    $host_groups{$_->{groupname}} = $_ for (@{ $default_host_config->{groups} || [ ] });
+    $host_groups{$_->{groupname}} = $_ for (@{ $host_config->{groups} || [ ] });
+
+    my $user_groups = $host_config->{user_groups} || $default_host_config->{user_groups};
+
+    for my $group (@{$user_groups || []})
+    {
+        my @users;
+        if ($group eq 'all')
+        {
+            @users = _grab_all_users();
+        }
+        else
+        {
+            @users = _grab_users_from_group($group);
+        }
+
+        for my $username (@users)
+        {
+            my $user = _grab_user($username);
+            next unless $user;
+
+            $host_users{$username} = $user;
+        }
+    }
+
+    my @users = sort { $a->{uid} <=> $b->{uid} }
+        map { $host_users{$_} } keys %host_users;
+
+    # add all groups with applicable users
+    for my $group (_grab_all_groups())
+    {
+        # trust what we have if something is degined already
+        next if $host_groups{$group};
+
+        my $group = Load(_get_file_contents("$sysdir/groups/$group.conf"));
+        $host_groups{$group->{groupname}} = $group;
+    }
+
+    # add magical per-user groups
+    for my $user (@users)
+    {
+        unless ($host_groups{$user->{username}})
+        {
+            $host_groups{$user->{username}} = {
+                gid => $user->{uid},
+                groupname => $user->{username},
+                users => [ ],
+            };
+        }
+    }
+
+    my @groups = sort { $a->{gid} <=> $b->{gid} }
+        map { $host_groups{$_} } keys %host_groups;
+
+    return {
+        users => \@users,
+        groups => \@groups,
+    };
+}
+
+sub _grab_user
+{
+    my $user = shift;
+
+    return unless -e "$sysdir/users/$user.conf";
+
+    my $user_conf = Load(_get_file_contents("$sysdir/users/$user.conf"));
+
+    return $user_conf;
+}
+
+
+sub _grab_all_users
+{
+    my @users;
+    opendir(DIR, "$sysdir/users");
+    while (my $file = readdir(DIR))
+    {
+        if ($file =~ /(.*?)\.conf$/)
+        {            
+            push @users, $1;
+        }
+    }
+    closedir(DIR);
+    return @users;
+}
+
+sub _grab_all_groups
+{
+    my @groups;
+    opendir(DIR, "$sysdir/groups");
+    while (my $file = readdir(DIR))
+    {
+        if ($file =~ /(.*?)\.conf$/)
+        {            
+            push @groups, $1;
+        }
+    }
+    closedir(DIR);
+    return @groups;
+}
+
+sub _grab_users_from_group
+{
+    my $group = shift;
+
+    return () unless -e "$sysdir/groups/$group.conf";
+
+    my $group_conf = Load(_get_file_contents("$sysdir/groups/$group.conf"));
+
+    return () unless $group_conf->{users} and ref($group_conf->{users}) eq 'ARRAY';
+
+    return @{ $group_conf->{users} };
+}
+
+sub _write_new_user_template
+{
+    my ($username, $uid) = @_;
+
+    open(F, ">$sysdir/users/$username.conf");
+    print F qq{username: $username
+uid: $uid
+fullname: $username
+homedir: /home/$username
+shell: /bin/bash
+disabled: 0
+#gid: (defaults to uid)
+#append_passwd: |
+#   systester:x:105:105::/home/systester:/bin/false
+#append_groups: |
+#   testers:x:105:root
+#user_groups:
+#   - sysadmin
+#ssh_keys:
+#   - "SSH key here"
+};
+    close(F);
+
+}
+
+sub _write_new_host_template
+{
+    my ($host) = @_;
+
+    open(F, ">$sysdir/hosts/$host.conf");
+    print F q{
+#users:
+#   - uid: 0
+#     username: root
+#     homedir: /root
+#     shell: /bin/bash
+#     password: '$6$928b679b70731fc7$OjB.vI0hI4PWC9ObsudW3ITZMBjo7Rfs6Dd5vQ80XZM0A6NU6EQqIVQAI3T90T5Bz3K9Vfha0cp176IAHaNQQ.'
+#     ssh_keys:
+#        - here
+#files:
+#   - remote_path: '/etc/foo'
+#     file: 'defaults/foo'
+#     chmod: 777
+#     owner: root
+#     group: root
+user_groups:
+   - all
+};
+    close(F);
+
+}
+
+sub _write_new_group_template
+{
+    my ($groupname, $gid) = @_;
+
+    open(F, ">$sysdir/groups/$groupname.conf");
+    print F qq{groupname: $groupname
+gid: $gid
+#users:
+#   - userhere
+};
+    close(F);
+
+}
+
+sub getnextuid { _get_file_contents("$sysdir/.maxuid") || 1001 }
+
+sub incrementuid
+{
+    my $next = getnextuid() + 1;
+
+    open(F, ">$sysdir/.maxuid");
+    print F $next;
+    close(F);
+}
+
+sub slock { die "lock file exists $sysdir/.lock" if -e "$sysdir/.lock"; `touch $sysdir/.lock` }
+sub sunlock { unlink("$sysdir/.lock") } 
+
+sub _local_host
+{
+    open(my $fh, "/etc/hostname");
+    my $hostname = <$fh>;
+    close($fh);
+
+    $hostname =~ s/\..*$//g;
+    $hostname =~ s/[\n\r]//g;
+
+    return $hostname;
+}
+
+sub _get_file_contents
+{
+    my $file = shift;
+
+    open(my $fh, $file);
+    my @content = <$fh>;
+    close($fh);
+
+    return join('', @content);
+}
+
+
+sub _write_file_contents
+{
+    my ($file, $data) = @_;
+
+    # check to see if this differs
+
+    if (-e $file)
+    {
+        if (md5_hex($data) eq md5_hex(_get_file_contents($file)))
+        {
+            return;
+        }
+    }
+
+    _log("writing: $file");
+
+    open(F, "> $file") or die $!;
+    print F $data;
+    close(F);
+}
+
+# quick and dirty
+sub _parse_options
+{
+    my %options;
+
+    my @acceptable_options = qw(
+        init adduser edituser interactive
+        deluser
+        addgroup editgroup
+        delgroup
+        addhost edithost
+        delhost
+        edithosts
+        mkpasswd
+        passwd
+        usersetpassword
+        usersetpasswordauthkeys
+        daemon
+    );
+
+    for my $arg (@ARGV)
+    {
+        # cleanse all parameters of all unrighteousness
+        #   `--` & `-` any parameter shall be removed
+        $arg =~ s/^--//;
+        $arg =~ s/^-//;
+
+        # does this carry an assignment?
+        if ($arg =~ /=/)
+        {
+            my ($key, $value) = split('=', $arg);
+
+            $options{$key} = $value;
+        }
+        else
+        {
+            $options{$arg} = 1;
+        }
+    }
+
+    for my $option (keys %options)
+    {
+        die("[$0] `$option` is an invalid option\n")
+            unless (grep { $_ eq $option } @acceptable_options)
+    }
+
+    return \%options;
+}
+
+sub _prompt_for_password
+{
+    print "Type new password: ";
+
+    ReadMode('noecho'); # don't echo
+    chomp(my $password = <STDIN>);
+    ReadMode(0);        # back to normal
+
+    print "\n";
+
+    print "Type new password again: ";
+
+    ReadMode('noecho'); # don't echo
+    chomp(my $password_confirm = <STDIN>);
+    ReadMode(0);        # back to normal
+
+    print "\n";
+
+    if ($password eq $password_confirm)
+    {
+        my $salt = rand() . $$ . rand();
+        $salt =~ s/\.//g;
+        $salt = '$6$'.md5_hex($salt);
+
+        return crypt($password, $salt);
+    }
+    else
+    {
+        warn "Passwords do not match\n";
+        exit(2);
+    }
+}
+
+sub usage
+{
+    warn "usage: $0 --interactive [command]\n";
+    warn "Commands:\n";
+    warn "   --adduser=[user]\n";
+    warn "   --edituser=[user]\n";
+    warn "   --deluser=[user]\n";
+    warn "   --addgroup=[group]\n";
+    warn "   --editgroup=[group]\n";
+    warn "   --delgroup=[group]\n";
+    warn "   --addhost=[host]\n";
+    warn "   --edithost=[host]\n";
+    warn "   --delhost=[host]\n";
+    warn "   --edithosts | edit hosts.conf file\n";
+    warn "   --mkpasswd (return password via stdout)\n";
+    warn "   --passwd=[user] (set a user's password)\n";
+    warn "   --usersetpassword=[user] allow a user to set their own password\n";
+    warn "   --usersetpasswordauthkeys returns authorized_keys file for all users to set their password\n";
+
+}
+
+sub edit_yaml_file
+{
+    my ($file) = @_;
+    my $tmp_file = md5_hex(rand() . $$ . rand());
+    copy($file, "/tmp/$tmp_file");
+    system($editor, "/tmp/$tmp_file");
+
+    do {
+        eval { Load(_get_file_contents("/tmp/$tmp_file")) };
+        if ($@)
+        {
+            print "Unable to parse file contents, please re-edit: $@\n";
+            print "Want to edit? [Y/n] ";
+            chomp(my $r = <STDIN>);
+
+            if ($r =~ /y/i)
+            {
+                system($editor, "/tmp/$tmp_file");
+            }
+            else
+            {
+                unlink("/tmp/$tmp_file");
+                sunlock();
+                die "Aborted\n";
+            }
+        }
+    } while $@;
+
+    move("/tmp/$tmp_file", $file);
+}
+
+exit __PACKAGE__->main;
+
+
+=head1 COPYRIGHT
+
+2012 Ohio-Pennsylvania Software, LLC.
+
+=head1 LICENSE
+
+This library is free software. You can redistribute it and/or modify it under the same terms as Perl itself.
+
+=head1 AUTHOR
+
+Michael J. Flickinger, C<< <mjflick@gnu.org> >>
+
+=cut
+
