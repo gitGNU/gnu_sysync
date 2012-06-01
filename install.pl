@@ -38,6 +38,30 @@ sub main
 ];
     close(F);
 
+    open(F, ">/etc/init.d/sysync");
+    print F q[#! /bin/sh                                                                                                      
+# /etc/init.d/sysync
+
+case "$1" in
+  start)
+    echo "Starting sysync"
+    /usr/sbin/sysync --daemon
+    ;;
+  stop)
+    echo "Stopping sysync"
+    kill `cat /var/run/sysync.pid`
+    ;;
+  *)
+    echo "Usage: /etc/init.d/sysync {start|stop}"
+    exit 1
+    ;;
+esac
+
+exit 0;
+
+];
+    close(F);
+    chmod 0755, "/etc/init.d/sysync";
 
     open(F, ">$sysdir/hosts/default.conf");
     print F q[users:
@@ -82,9 +106,6 @@ groups:
    - { gid: 103, groupname: crontab }
    - { gid: 104, groupname: ssh }
    - { gid: 65534, groupname: nogroup }
-files:
-   - remote_path: '/etc/ssh/sshd_config'
-     file: 'defaults/sshd_config'
 # only import users from the follow groups
 # use all for all users
 user_groups:

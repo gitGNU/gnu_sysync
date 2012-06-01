@@ -10,6 +10,7 @@ use POSIX ":sys_wait_h";
 use IPC::Open3;
 use YAML;
 
+my $max_workers = 10;
 my $sysdir = '/var/sysync';
 my $stagedir = '/var/sysync/stage';
 
@@ -288,6 +289,20 @@ sub REAPER
 
 sub daemon
 {
+    unless ($ENV{DEBUG})
+    {
+        if (my $pid = fork())
+        {
+            warn "sysync-daemon started\n";
+            _write_file_contents("/var/run/sysync.pid", $pid);
+            exit(0);
+        }
+        else
+        {
+            # do nothing
+        }
+    }
+
     open(LOG, ">>/var/log/sysync.log") unless $ENV{DEBUG};
 
     _log("Starting sysync daemon.");
@@ -392,40 +407,26 @@ sub daemon
 
         for my $h (@host_addresses)
         {
-            _sync_host($h->{host}, $h->{address});
-        }
+            while ($current_workers >= $max_workers) { usleep(2000) };
 
-        # sync every host
-        #for my $
+            if (fork())
+            {
+                $current_workers++;
+            }
+            else
+            {
+                $0 = 'sysync-worker';
+                eval { _sync_host($h->{host}, $h->{address}) };
+                if ($@)
+                {
+                    _log($@);
+                }
+                exit(0);
+            }
+        }
 
         sleep(5);
     }
-        
-        # while ($current_workers >= $max_workers) { usleep($utimeout) };
-
-        # if (fork())
-        # {
-        #     $current_workers++;
-        # }
-        # else
-        # {
-        #     $0 = 'sysync [worker: ]';
-
-        #             $current_workers = 0; # child has no workers
-
-        #             my %args = (ssl_params => \%ssl_params);
-
-        #             if ($sock == $ssl_sock)
-        #             {
-        #                 $args{ssl} = 1;
-        #                 exit unless IO::Socket::SSL->start_SSL($new_sock, %ssl_params);
-        #             }
-
-        #             $class->handle_session($new_sock, %args);
-        #             exit(0);
-        #         }
-
-
 }
 
 
