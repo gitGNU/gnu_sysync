@@ -194,7 +194,7 @@ sub main
     }
 }
 
-sub _log { my $lt=localtime; print "$lt: $_[0]\n" }
+sub _log { my $lt=localtime; print LOG "$lt: $_[0]\n" }
 
 sub _sync_host
 {
@@ -324,17 +324,23 @@ sub daemon
 
             next unless $ent_data;
 
-            _write_file_contents("$stagedir/$host/etc/passwd", $ent_data->{passwd});
-            chmod 0644, "$stagedir/$host/etc/passwd";
-            chown 0, 0, "$stagedir/$host/etc/passwd";
+            if (_write_file_contents("$stagedir/$host/etc/passwd", $ent_data->{passwd}))
+            {
+                chmod 0644, "$stagedir/$host/etc/passwd";
+                chown 0, 0, "$stagedir/$host/etc/passwd";
+            }
 
-            _write_file_contents("$stagedir/$host/etc/group", $ent_data->{group});
-            chmod 0644, "$stagedir/$host/etc/group";
-            chown 0, 0, "$stagedir/$host/etc/group";
+            if (_write_file_contents("$stagedir/$host/etc/group", $ent_data->{group}))
+            {
+                chmod 0644, "$stagedir/$host/etc/group";
+                chown 0, 0, "$stagedir/$host/etc/group";
+            }
 
-            _write_file_contents("$stagedir/$host/etc/shadow", $ent_data->{shadow});
-            chmod 0640, "$stagedir/$host/etc/shadow";
-            chown 0, 42, "$stagedir/$host/etc/shadow";
+            if (_write_file_contents("$stagedir/$host/etc/shadow", $ent_data->{shadow}))
+            {
+                chmod 0640, "$stagedir/$host/etc/shadow";
+                chown 0, 42, "$stagedir/$host/etc/shadow";
+            }
         }
 
         # map hosts to addresses
@@ -721,6 +727,8 @@ sub _write_file_contents
     open(F, "> $file") or die $!;
     print F $data;
     close(F);
+
+    return 1;
 }
 
 # quick and dirty
