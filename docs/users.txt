@@ -1,0 +1,25 @@
+Creating Users:
+
+use: sysync --adduser=foo
+
+edit the user:
+sysync --edituser=foo
+
+You'll see, in your favorite text editor:
+username: foo
+uid: 1001
+fullname: Foo Bar
+homedir: /home/foo
+shell: /bin/bash
+disabled: 0
+ssh_keys:
+   - "sshkey one goes here"
+   - "sshkey two goes here"
+
+
+Now, set an initial password:
+
+sysync --passwd=foo
+
+Enter the initial password.
+

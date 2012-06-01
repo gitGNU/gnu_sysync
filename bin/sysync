@@ -616,12 +616,6 @@ homedir: /home/$username
 shell: /bin/bash
 disabled: 0
 #gid: (defaults to uid)
-#append_passwd: |
-#   systester:x:105:105::/home/systester:/bin/false
-#append_groups: |
-#   testers:x:105:root
-#user_groups:
-#   - sysadmin
 #ssh_keys:
 #   - "SSH key here"
 };
@@ -649,6 +643,8 @@ sub _write_new_host_template
 #     chmod: 777
 #     owner: root
 #     group: root
+# only import users from the following groups
+# use all for all users
 user_groups:
    - all
 };
