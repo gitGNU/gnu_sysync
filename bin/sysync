@@ -388,7 +388,7 @@ sub daemon
             unless (-d "$stagedir/$host/etc/ssh/authorized_keys")
             {
                 mkdir "$stagedir/$host/etc/ssh/authorized_keys";
-                chmod 0755, "$Stagedir/$host/etc/ssh/authorized_keys";
+                chmod 0755, "$stagedir/$host/etc/ssh/authorized_keys";
                 chown 0, 0, "$stagedir/$host/etc/ssh/authorized_keys";
                 _log("Creating $stagedir/$host/etc/ssh/authorized_keys");
             }
