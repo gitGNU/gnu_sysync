@@ -18,6 +18,7 @@ my $editor = $ENV{EDITOR} || 'vi';
 
 die "sysync may only be ran as root\n" unless $< == 0;
 
+my @TRAILING_ARGS;
 open(LOG, ">/dev/null");
 *LOG = *STDERR if $ENV{DEBUG};
 
@@ -184,6 +185,44 @@ sub main
         }
 
         print $out;
+    }
+    elsif ($options->{userset})
+    {
+        my $out = '';
+
+        for my $username (_grab_all_users())
+        {
+            my $user = Load(_get_file_contents("$sysdir/users/$username.conf"));
+            for my $key (@{ $user->{ssh_keys} || [] })
+            {
+                $out .= qq[command="sudo /usr/sbin/sysync --usersetpassword=$username" $key\n];
+            }
+        }
+
+        print $out;
+    }
+    elsif (my $host = $options->{cmd})
+    {
+        die "need to specify host\n" if $host eq '1';
+
+        die "host does not exist\n" unless -e "$sysdir/hosts/$host.conf";
+
+        my $hosts = Load(_get_file_contents("$sysdir/hosts.conf")) || {};
+
+        die "host not mapped to addresses\n" unless $hosts->{hosts}{$host};
+
+        for my $h (@{ $hosts->{hosts}{$host} || [] })
+        {
+            print "$h:\n";
+            use Data::Dumper;
+
+            my $r = _system('ssh', '-carcfour', '-C', "root\@${h}", '-i', 
+                            '/var/sysync/keys/sysync_rsa', @TRAILING_ARGS);
+            my $s = join(' ', @TRAILING_ARGS);
+            print STDOUT $r->{stdout};
+            print STDERR $r->{stderr};
+        }
+
     }
     elsif ($options->{daemon})
     {
@@ -791,10 +830,14 @@ sub _parse_options
         usersetpassword
         usersetpasswordauthkeys
         daemon
+        cmd
     );
 
-    for my $arg (@ARGV)
+    my @OPTS = @ARGV;
+    while (@OPTS)
     {
+        my $arg = shift @OPTS;
+
         # cleanse all parameters of all unrighteousness
         #   `--` & `-` any parameter shall be removed
         $arg =~ s/^--//;
@@ -806,6 +849,12 @@ sub _parse_options
             my ($key, $value) = split('=', $arg);
 
             $options{$key} = $value;
+
+            if ($arg =~ /^cmd\=/)
+            {
+                @TRAILING_ARGS = @OPTS;
+                last;
+            }
         }
         else
         {
@@ -874,7 +923,7 @@ sub usage
     warn "   --usersetpassword=[user] allow a user to set their own password\n";
     warn "   --usersetpasswordauthkeys returns authorized_keys file for all users to set their password\n";
     warn "   --daemon (run in daemon mode)\n";
-
+    warn "   --cmd=[host] [command]\n";
 }
 
 sub edit_yaml_file
