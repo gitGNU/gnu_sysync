@@ -379,7 +379,7 @@ sub daemon
             unless (-d "$stagedir/$host/etc/ssh")
             {
                 mkdir "$stagedir/$host/etc/ssh";
-                chmod 0744, "$stagedir/$host/etc/ssh";
+                chmod 0755, "$stagedir/$host/etc/ssh";
                 chown 0, 0, "$stagedir/$host/etc/ssh";
                 _log("Creating $stagedir/$host/etc/ssh");
             }
