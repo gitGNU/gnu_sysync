@@ -265,6 +265,7 @@ sub _sync_host
             next if $_ =~ /^sending /;
             next if $_ =~ /^sent /;
             next if $_ =~ /^total /;
+            next if $_ =~ /^Warning: Permanently added/;
 
             push @out_lines, "$address: $_" if $_;
         }
