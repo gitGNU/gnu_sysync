@@ -1,15 +1,237 @@
+Introduction to Sysync
+================================
+Sysync is a tool to manage users/groups and configuration files across multiple hosts.
+
+To install sysync, simply run the install.pl script.
 
 
-User files are in  /var/sysync/users/$USERNAME.conf
+Add a user
+================================
+To get started, first you'll want to create a user account for yourself.
+$ sudo sysync --adduser=yourusername --interactive and you'll see:
 
-Users are defined as such:
-
-username: mjflick
-uid: 1001
-fullname: mjflick
-homedir: /home/mjflick
+username: elmo
+uid: 1009
+fullname: elmo
+homedir: /home/elmo
 shell: /bin/bash
-ssh_keys:
-   - "ssh key here"
+disabled: 0
+#gid: (defaults to uid)
+#ssh_keys:
+#   - "SSH1 key here"
+#   - "SSH2 key here"
+#   - "SSH3 key here"
 
-Hosts are in /var/syssync/hosts/
+Edit the information as you'd like, you can also put multiple ssh keys here per-user.
+Next, you'll want to add a group for your user.
+
+
+Add a group
+================================
+$ sudo EDITOR=emacs sysync --addgroup=slackers2 --interactive 
+(in this example, I'm forcing the use of the emacs text editor)
+
+groupname: slackers2
+gid: 1011
+users:
+   - elmo
+   - elmosbrother
+
+Next, you'll want to setup your default host configuration.
+
+
+Configure default host
+================================
+Simply run sysync --edithost=default
+
+You'll see something akin to this in your favorite text editor:
+
+users:
+   - uid: 0
+     username: root
+     homedir: /root
+     shell: /bin/bash
+     password: ''
+     ssh_keys:
+         - "ssh-rsa 1XXX"
+         - "ssh-rsa 2XXX"
+         - "ssh-rsa 3XXX"
+   - { uid: 1, username: daemon, homedir: /usr/sbin, shell: /bin/sh }
+   - { uid: 2, username: bin, homedir: /bin, shell: /bin/sh }
+   - { uid: 3, username: sys, homedir: /dev, shell: /bin/sh }
+   - { uid: 8, username: mail, homedir: /var/mail, shell: /bin/sh }
+   - { uid: 10, username: uucp, homedir: /var/spool/uucp, shell: /bin/sh }
+   - { uid: 33, username: www-data, homedir: /var/www, shell: /bin/sh }
+   - { uid: 34, username: backup, homedir: /var/backups, shell: /bin/sh }
+   - { uid: 65534, username: nobody, homedir: /nonexistent, shell: /bin/sh }
+   - { uid: 100, gid: 101,  username: libuuid, homedir: /var/lib/libuuid, shell: /bin/sh }
+   - { uid: 101, gid: 103, username: syslog, homedir: /home/syslgo, shell: /bin/false }
+   - { uid: 102, username: sshd, homedir: /var/run/sshd, shell: /usr/sbin/nologin }
+   - { uid: 103, username: ntpd, homedir: /var/run/openntpd, shell: /bin/false }
+   - { uid: 104, username: 'Debian-exim', gid: 109, homedir: /var/spool/exim4, shell: /bin/false }
+groups:
+   - { gid: 4, groupname: adm }
+   - { gid: 5, groupname: tty }
+   - { gid: 6, groupname: disk }
+   - { gid: 7, groupname: lp }
+   - { gid: 15, groupname: kmem }
+   - { gid: 24, groupname: cdrom }
+   - { gid: 25, groupname: floppy }
+   - { gid: 30, groupname: dip }
+   - { gid: 37, groupname: operator }
+   - { gid: 40, groupname: src }
+   - { gid: 42, groupname: shadow }
+   - { gid: 43, groupname: utmp }
+   - { gid: 44, groupname: video }
+   - { gid: 45, groupname: sasl }
+   - { gid: 46, groupname: plugdev }
+   - { gid: 50, groupname: staff }
+   - { gid: 100, groupname: users }
+   - { gid: 101, groupname: libuuid }
+   - { gid: 103, groupname: crontab }
+   - { gid: 104, groupname: ssh }
+   - { gid: 106, groupname: mlocate }
+   - { gid: 107, groupname: landscape }
+   - { gid: 109, groupname: 'Debian-exim' }
+   - { gid: 65534, groupname: nogroup }
+# only import users from the follow groups
+# use all for all users
+user_groups:
+   - all
+
+You'll want to set your default root password, along with any ssh keys you'd like
+propagated to the machine.
+
+You'll notice the "user_groups" config, which by default is set to "all". This setting
+specifies which groups of users should be allowed on the host.  'all' is a special group
+which imports all users.
+
+
+Add a host configuration
+================================
+$ sudo sysync --addhost=spam --interactive
+
+You'll see:
+
+#users:
+#   - uid: 0
+#     username: root
+#     homedir: /root
+#     shell: /bin/bash
+#     password: '$6$928b679b70731fc7$OjB.vI0hI4PWC9ObsudW3ITZMBjo7Rfs6Dd5vQ80XZM0A6NU6EQqIVQAI3T90T5Bz3K9Vfha0cp176IAHaNQQ.'
+#     ssh_keys:
+#        - here
+# only import users from the following groups
+# use all for all users
+user_groups:
+   - all
+
+You can add system users and override users, referenced by the default host image, in this file.
+For example, you could set a different root password on every host configuration.
+
+Example:
+
+users:
+   - uid: 0
+     username: root
+     homedir: /root
+     shell: /bin/bash
+     password: '$6$928b679b70731fc7$OjB.vI0hI4PWC9ObsudW3ITZMBjo7Rfs6Dd5vQ80XZM0A6NU6EQqIVQAI3T90T5Bz3K9Vfha0cp176IAHaNQQ.'
+     ssh_keys:
+        - here
+# only import users from the following groups
+# use all for all users
+user_groups:
+   - sysadmin
+
+In the above example, we're overriding the default password and ssh keys for the root user.  
+We're also only importing members of the sysadmin group.
+
+
+Mapping hosts to hosts
+================================
+To edit the host mapping:
+
+$ sudo sysync --edithosts
+
+
+hosts:
+   spam:
+      - spam01p.savannah.gnu.org
+      - spam02p.savannah.gnu.org
+   otherhost:
+      - otherhostwouldgohere
+
+Multple physical hosts can be mapped to one host configuration, as seen in the above example.
+
+
+Controlling files
+================================
+Once sysync is running, with your hosts created, it will create a staging directory
+in /var/sysync/stage.  The staging directory contains the group, passwd, and shadow 
+files for the specific host configuration.  In our above example, the files written
+to the 'spam' host configuration are located in /var/sysync/stage/spam.
+
+Any file that's created in the stage directory will be pushed out to the relevant
+hosts.
+
+Symlinks are also intelligent, and are imported as symlinks if contained within a 
+specific host's staging directory.  For example, if you:
+
+# touch /var/sysync/stage/spam/etc/awesome.conf
+# cd /var/sysync/stage/spam/etc/
+# ln -s awesome.conf superawesome.conf
+
+The superawesome.conf file will be a symlink on the hosts.
+
+However, if you create a shared directory across multiple hosts and symlink to it,
+the files will be pushed out as files.  For example:
+
+# mkdir -p /var/sysync/stage/shared/etc/
+# echo what > /var/sysync/stage/shared/etc/foo
+# ln -s /var/sysync/stage/shared/etc/foo /var/sysync/stage/spam/etc/foo
+
+/var/sysync/stage/spam/etc/foo will be pushed out as a file.
+
+By default, sysync pushes changes whenever a user/group/host is modified.  When 
+files are changed, sysync will push it out on the next refresh.  The sysync 
+daemon can be forced to refreshed by using the `sysync --refresh-now` command.
+
+
+SSH keys
+================================
+Sysync pushes ssh keys under /etc/ssh/authorized_keys/${USERNAME}, if you
+want to use sysync to manage ssh keys, you'll want to configure sshd_config
+to use that path:
+
+AuthorizedKeysFile      /etc/ssh/authorized_keys/%u
+
+
+Remote password changes
+================================
+The host running sysync may permit for remote password changes for users.
+
+In this case, we're going to assume this sysync host is not controlling it's own
+users with sysync.
+
+To configure this:
+
+1) Setup a user on the sysync host, let's say 'sysync'
+
+
+2) Add user to suders:
+sysync ALL=(ALL)NOPASSWD:/usr/sbin/sysync
+
+3) Setup cron to build authorized_keys file for login:
+
+$ cat /etc/cron.hourly/sysync-keys
+#!/bin/bash
+
+/usr/sbin/sysync --usersetpasswordauthkeys > /home/sysync/.ssh/authorized_keys
+
+4) This generates a file like this:
+
+command="sudo /usr/sbin/sysync --usersetpassword=elmo" ssh-rsa elmosshkeyhere
+command="sudo /usr/sbin/sysync --usersetpassword=elmo" ssh-rsa elmosothershkeyhere
+
+5) If a user changes their password, sysync pushes it to the relevant hosts.
