@@ -3,7 +3,6 @@ use strict;
 
 use File::Copy;
 use Digest::MD5 qw(md5_hex);
-use Term::ReadKey;
 use Time::HiRes 'usleep';
 use POSIX ":sys_wait_h";
 
@@ -167,9 +166,11 @@ sub main
         print "Hello $username!\n\n";
 
         print "Please enter your password: ";
-        ReadMode('noecho'); # don't echo
+
+        system('stty','-echo');
         chomp(my $password = <STDIN>);
-        ReadMode(0);        # back to normal
+        system('stty','echo');
+
         print "\n";
         my $current_pw = _get_file_contents("$sysdir/users/$username.passwd");
 
@@ -916,17 +917,17 @@ sub _prompt_for_password
 {
     print "Type new password: ";
 
-    ReadMode('noecho'); # don't echo
+    system('stty','-echo');
     chomp(my $password = <STDIN>);
-    ReadMode(0);        # back to normal
+    system('stty','echo');
 
     print "\n";
 
     print "Type new password again: ";
 
-    ReadMode('noecho'); # don't echo
+    system('stty','-echo');
     chomp(my $password_confirm = <STDIN>);
-    ReadMode(0);        # back to normal
+    system('stty','echo');
 
     print "\n";
 
@@ -1008,7 +1009,24 @@ exit __PACKAGE__->main;
 
 =head1 LICENSE
 
-This library is free software. You can redistribute it and/or modify it under the same terms as Perl itself.
+ Create authorized_keys file for each system user
+ 
+ Copyright (C) 2012 2012 Ohio-Pennsylvania Software, LLC.
+
+ This file is part of Sysync.
+ 
+ Sysync is free software: you can redistribute it and/or modify
+ it under the terms of the GNU Affero General Public License as
+ published by the Free Software Foundation, either version 3 of the
+ License, or (at your option) any later version.
+ 
+ Sysync is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU Affero General Public License for more details.
+ 
+ You should have received a copy of the GNU Affero General Public License
+ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 =head1 AUTHOR
 
