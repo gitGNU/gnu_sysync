@@ -1,9 +1,0 @@
-sysync --newgroup=food
-
-sysync --editgroup=food
-
-groupname: food
-gid: 1002
-users:
-   - foo
-
