@@ -23,8 +23,12 @@ disabled: 0
 #   - "SSH3 key here"
 
 Edit the information as you'd like, you can also put multiple ssh keys here per-user.
-Next, you'll want to add a group for your user.
 
+Now, set the user's initial password:
+
+$ sudo sysync --passwd=elmo
+
+Next, you'll want to add a group for your user.
 
 Add a group
 ================================
