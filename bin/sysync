@@ -37,6 +37,8 @@ my $editor = $ENV{EDITOR} || 'vi';
 
 die "sysync may only be ran as root\n" unless $< == 0;
 
+my $current_workers = 0;
+
 my @TRAILING_ARGS;
 open(LOG, ">/dev/null");
 *LOG = *STDERR if $ENV{DEBUG};
@@ -223,28 +225,64 @@ sub main
 
         print $out;
     }
-    elsif (my $host = $options->{cmd})
+    elsif (my $host_list = $options->{cmd})
     {
         die "need to specify host\n" if $host eq '1';
 
-        die "host does not exist\n" unless -e "$sysdir/hosts/$host.conf";
-
         my $hosts = Load(_get_file_contents("$sysdir/hosts.conf")) || {};
+        my %pids;
 
-        die "host not mapped to addresses\n" unless $hosts->{hosts}{$host};
-
-        for my $h (@{ $hosts->{hosts}{$host} || [] })
+        for my $host (split(',', $host_list))
         {
-            print "$h:\n";
-            use Data::Dumper;
-
-            my $r = _system('ssh', '-carcfour', '-C', "root\@${h}", '-i', 
-                            '/var/sysync/keys/sysync_rsa', @TRAILING_ARGS);
-            my $s = join(' ', @TRAILING_ARGS);
-            print STDOUT $r->{stdout};
-            print STDERR $r->{stderr};
+            die "host does not exist\n" unless -e "$sysdir/hosts/$host.conf";
+            die "host $host not mapped to addresses\n" unless $hosts->{hosts}{$host};
         }
 
+        for my $host (split(',', $host_list))
+        {
+            while ($current_workers >= $max_workers) { usleep(2000) };
+
+            for my $h (@{ $hosts->{hosts}{$host} || [] })
+            {
+                my $s = join(' ', @TRAILING_ARGS);
+
+                # give pause
+                while ($current_workers >= $max_workers) { usleep(2000) };
+
+                if (my $pid = fork())
+                {
+                    $pids{$pid} = 1;
+                    $current_workers++;
+                    print STDOUT "starting: [pid: $pid][$host => $h] $s\n";
+                }
+                else
+                {
+                    $0 = "sysync-cmd [$host => $h] $s";
+                    my $r = _system('ssh', '-carcfour', '-C', "root\@${h}", '-i', 
+                                    '/var/sysync/keys/sysync_rsa', @TRAILING_ARGS);
+
+                    print STDOUT "completed: [pid: $$][$host => $h] $s\n";
+                    print STDOUT "===STDOUT===\n" if $r->{stdout};
+                    print STDOUT $r->{stdout};
+                    print STDOUT "===STDERR===\n" if $r->{stderr};
+                    print STDOUT $r->{stderr};
+                    print STDOUT "===END===\n";
+
+                    exit(0);
+                }
+            }
+        }
+
+        print STDOUT "waiting for children to finish...\n";
+        while (keys %pids)
+        {
+            for my $pid (keys %pids)
+            {
+                delete $pids{$pid}
+                    if waitpid($pid, WNOHANG);
+            }
+            usleep(2000);
+        }
     }
     elsif ($options->{daemon})
     {
@@ -332,8 +370,6 @@ sub _system
         stdout => $out,
     };
 }
-
-my $current_workers = 0;
 
 $SIG{CHLD} = \&REAPER;
 
@@ -500,7 +536,7 @@ sub daemon
             }
             else
             {
-                $0 = 'sysync-worker';
+                $0 = "sysync-refresh [$h->{host} => $h->{address}]";
                 eval { _sync_host($h->{host}, $h->{address}) };
                 if ($@)
                 {
@@ -984,7 +1020,7 @@ sub usage
     warn "   --usersetpassword=[user] allow a user to set their own password\n";
     warn "   --usersetpasswordauthkeys returns authorized_keys file for all users to set their password\n";
     warn "   --daemon (run in daemon mode)\n";
-    warn "   --cmd=[host] [command]\n";
+    warn "   --cmd=[host,host2] [command]\n";
     warn "   --refresh-now (by default, sysync-daemon syncs everything every 30 minutes, this forces a refresh)\n";
 }
 
