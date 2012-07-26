@@ -233,7 +233,7 @@ sub main
         my %pids;
 
         # make 'all' hosts directive work
-        $host_list = join(',', keys($hosts->{hosts}))
+        $host_list = join(',', keys(%{$hosts->{hosts} || {}}))
             if $host_list eq 'all' and $hosts->{hosts};
 
         for my $host (split(',', $host_list))
@@ -296,6 +296,8 @@ sub main
     {
         usage();
     }
+
+    return 0;
 }
 
 sub _log { my $lt=localtime; print LOG "$lt: $_[0]\n" }
