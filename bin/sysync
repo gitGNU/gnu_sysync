@@ -277,7 +277,6 @@ sub main
             }
         }
 
-        print STDOUT "waiting for children to finish...\n";
         while (keys %pids)
         {
             for my $pid (keys %pids)
