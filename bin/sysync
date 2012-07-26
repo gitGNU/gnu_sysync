@@ -232,6 +232,10 @@ sub main
         my $hosts = Load(_get_file_contents("$sysdir/hosts.conf")) || {};
         my %pids;
 
+        # make 'all' hosts directive work
+        $host_list = join(',', keys($hosts->{hosts}))
+            if $host_list eq 'all' and $hosts->{hosts};
+
         for my $host (split(',', $host_list))
         {
             die "host does not exist\n" unless -e "$sysdir/hosts/$host.conf";
