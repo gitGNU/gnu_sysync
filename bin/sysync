@@ -391,88 +391,6 @@ sub REAPER
 }
 
 
-sub daemon
-{
-    unless ($ENV{DEBUG})
-    {
-        if (my $pid = fork())
-        {
-            warn "sysync-daemon started\n";
-            _write_file_contents("/var/run/sysync.pid", $pid);
-            exit(0);
-        }
-        else
-        {
-            # do nothing
-        }
-    }
-
-    open(LOG, ">>/var/log/sysync.log") unless $ENV{DEBUG};
-
-    _log("Starting sysync daemon.");
-
-    $0 = 'sysync-daemon';
-
-    unlink("$stagedir/.refreshnow")
-        if -e "$stagedir/.refreshnow";
-
-    while (1)
-    {
-        my $hosts = Load(_get_file_contents("$sysdir/hosts.conf")) || {};
-        my @hosts = keys %{ $hosts->{hosts} || {} };
-
-        _update_all_hosts($hosts);
-
-        # map hosts to addresses
-        my @host_addresses;
-
-        for my $host (@hosts)
-        {
-            for my $address (@{ $hosts->{hosts}{$host} || [] })
-            {
-                push @host_addresses, { 
-                    host => $host,
-                    address => $address,
-                };
-            }
-        }
-
-        for my $h (@host_addresses)
-        {
-            while ($current_workers >= $max_workers) { usleep(2000) };
-
-            if (fork())
-            {
-                $current_workers++;
-            }
-            else
-            {
-                $0 = "sysync-refresh [$h->{host} => $h->{address}]";
-                eval { _sync_host($h->{host}, $h->{address}) };
-                if ($@)
-                {
-                    _log($@);
-                }
-                exit(0);
-            }
-        }
-
-        my $sleep_counter = 1;
-
-        while ($sleep_counter <= $default_sleep)
-        {
-            sleep(1);
-            $sleep_counter++;
-
-            if (-e "$stagedir/.refreshnow")
-            {
-                unlink("$stagedir/.refreshnow");
-                last;
-            }
-        }
-    }
-}
-
 sub _write_new_user_template
 {
     my ($username, $uid) = @_;
@@ -544,53 +462,6 @@ sub slock { die "lock file exists $sysdir/.lock" if -e "$sysdir/.lock"; `touch $
 sub sunlock { unlink("$sysdir/.lock") } 
 
 sub _touch { open(F, '>'.shift); close(F); }
-
-sub _local_host
-{
-    open(my $fh, "/etc/hostname");
-    my $hostname = <$fh>;
-    close($fh);
-
-    $hostname =~ s/\..*$//g;
-    $hostname =~ s/[\n\r]//g;
-
-    return $hostname;
-}
-
-sub _get_file_contents
-{
-    my $file = shift;
-
-    open(my $fh, $file);
-    my @content = <$fh>;
-    close($fh);
-
-    return join('', @content);
-}
-
-
-sub _write_file_contents
-{
-    my ($file, $data) = @_;
-
-    # check to see if this differs
-
-    if (-e $file)
-    {
-        if (md5_hex($data) eq md5_hex(_get_file_contents($file)))
-        {
-            return;
-        }
-    }
-
-    _log("writing: $file");
-
-    open(F, "> $file") or die $!;
-    print F $data;
-    close(F);
-
-    return 1;
-}
 
 # quick and dirty
 sub _parse_options
@@ -716,7 +587,7 @@ sub edit_yaml_file
     system($editor, "/tmp/$tmp_file");
 
     do {
-        eval { Load(_get_file_contents("/tmp/$tmp_file")) };
+        eval { Load(Sysync::read_file_contents("/tmp/$tmp_file")) };
         if ($@)
         {
             print "Unable to parse file contents, please re-edit: $@\n";

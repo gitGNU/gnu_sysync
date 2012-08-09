@@ -1,6 +1,7 @@
+package Sysync;
+use strict;
 
-
-sub _generate_user_line
+sub generate_user_line
 {
     my ($user, $what) = @_;
 
@@ -15,7 +16,7 @@ sub _generate_user_line
     }
     else
     {
-        my $p = _get_file_contents("$sysdir/users/$user->{username}.passwd");
+        my $p = read_file_contents("$sysdir/users/$user->{username}.passwd");
 
         $password = $p if $p;
     }
@@ -35,7 +36,7 @@ sub _generate_user_line
     return $line;
 }
 
-sub _generate_group_line
+sub generate_group_line
 {
     my $group    = shift;
 
@@ -43,9 +44,7 @@ sub _generate_group_line
     return join(':', $group->{groupname}, 'x', $group->{gid}, $users);
 }
 
-
-
-sub _get_host_ent
+sub get_host_ent
 {
     my $host = shift;
 
@@ -85,8 +84,7 @@ sub _get_host_ent
     };
 }
 
-
-sub _update_all_hosts
+sub update_all_hosts
 {
     # grab list of hosts along with image name
     my $hosts = shift || Load(_get_file_contents("$sysdir/hosts.conf")) || {};
@@ -137,7 +135,7 @@ sub _update_all_hosts
         }
 
         # write host files
-        my $ent_data = _get_host_ent($host);
+        my $ent_data = get_host_ent($host);
 
         next unless $ent_data;
 
@@ -179,3 +177,41 @@ sub _update_all_hosts
 
     return $r;
 }
+
+sub write_file_contents
+{
+    my ($file, $data) = @_;
+
+    # check to see if this differs
+
+    if (-e $file)
+    {
+        if (md5_hex($data) eq md5_hex(_get_file_contents($file)))
+        {
+            return;
+        }
+    }
+
+    _log("writing: $file");
+
+    open(F, "> $file") or die $!;
+    print F $data;
+    close(F);
+
+    return 1;
+}
+
+sub read_file_contents
+{
+    my $file = shift;
+
+    open(my $fh, $file);
+    my @content = <$fh>;
+    close($fh);
+
+    return join('', @content);
+}
+
+
+1;
+
