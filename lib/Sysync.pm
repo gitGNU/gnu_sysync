@@ -17,11 +17,25 @@ sub new
         sysdir      => $params->{sysdir},
         stagedir    => ($params->{stagedir} || "$params->{sysdir}/stage"),
         salt_prefix => (exists($params->{salt_prefix}) ? $params->{salt_prefix} : '$6$'),
+        log         => $params->{log},
     };
 
     bless($self, $class);
 
     return $self;
+}
+
+=head3 log
+
+=cut
+
+sub log
+{
+    my $self = shift;
+    my $lt   = localtime;
+    my $log  = $self->{log};
+
+    print $log "$lt: $_[0]\n";
 }
 
 =head3 sysdir
