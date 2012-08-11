@@ -58,6 +58,20 @@ sub stagedir { join('/', shift->sysdir, 'stage' ) }
 
 sub get_user_password { die 'needs implemented' }
 
+=head3 grab_users_from_group
+
+=cut
+
+sub grab_users_from_group { die 'needs implemented' }
+
+=head3 grab_all_groups
+
+Returns array of all groups.
+
+=cut
+
+sub grab_all_goups { die 'needs implemented' }
+
 =head3 generate_user_line
 
 Generate a line for both the user and shadow file.

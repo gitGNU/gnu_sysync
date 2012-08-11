@@ -49,6 +49,12 @@ sub is_valid_host
     return -e "$sysdir/hosts/$host.conf";
 }
 
+=head3 grab_host_users_groups
+
+Grab both users and groups for a specific host.
+
+=cut
+
 sub grab_host_users_groups
 {
     my ($self, $host) = @_;
@@ -81,16 +87,16 @@ sub grab_host_users_groups
         my @users;
         if ($group eq 'all')
         {
-            @users = _grab_all_users();
+            @users = $self->grab_all_users;
         }
         else
         {
-            @users = _grab_users_from_group($group);
+            @users = $self->grab_users_from_group($group);
         }
 
         for my $username (@users)
         {
-            my $user = _grab_user($username);
+            my $user = $self->grab_user($username);
             next unless $user;
 
             $host_users{$username} = $user;
@@ -101,7 +107,7 @@ sub grab_host_users_groups
         map { $host_users{$_} } keys %host_users;
 
     # add all groups with applicable users
-    for my $group (_grab_all_groups())
+    for my $group ($self->grab_all_groups)
     {
         # trust what we have if something is degined already
         next if $host_groups{$group};
@@ -127,25 +133,34 @@ sub grab_host_users_groups
         map { $host_groups{$_} } keys %host_groups;
 
     return {
-        users => \@users,
+        users  => \@users,
         groups => \@groups,
     };
 }
 
-sub _grab_user
+=head3 grab_user
+
+=cut
+
+sub grab_user
 {
-    my $user = shift;
+    my ($self, $username) = @_;
 
-    return unless -e "$sysdir/users/$user.conf";
+    return unless -e "$sysdir/users/$username.conf";
 
-    my $user_conf = Load($self->get_file_contents("$sysdir/users/$user.conf"));
+    my $user_conf = Load($self->get_file_contents("$sysdir/users/$username.conf"));
 
     return $user_conf;
 }
 
+=head3 grab_all_users
 
-sub _grab_all_users
+=cut
+
+sub grab_all_users
 {
+    my $self = shift;
+
     my @users;
     opendir(DIR, "$sysdir/users");
     while (my $file = readdir(DIR))
@@ -159,8 +174,16 @@ sub _grab_all_users
     return @users;
 }
 
-sub _grab_all_groups
+=head3 grab_all_groups
+
+Returns array of groups
+
+=cut
+
+sub grab_all_groups
 {
+    my $self = shift;
+
     my @groups;
     opendir(DIR, "$sysdir/groups");
     while (my $file = readdir(DIR))
@@ -174,9 +197,14 @@ sub _grab_all_groups
     return @groups;
 }
 
-sub _grab_users_from_group
+=head3 grab_users_from_group
+
+
+=cut
+
+sub grab_users_from_group
 {
-    my $group = shift;
+    my ($self, $group) = @_;
 
     return () unless -e "$sysdir/groups/$group.conf";
 
@@ -186,3 +214,6 @@ sub _grab_users_from_group
 
     return @{ $group_conf->{users} };
 }
+
+1;
+
