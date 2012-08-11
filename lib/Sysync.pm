@@ -72,6 +72,14 @@ Returns array of all groups.
 
 sub grab_all_groups { die 'needs implemented' }
 
+=head3 grab_all_hosts
+
+Returns all hosts.
+
+=cut
+
+sub grab_all_hosts { die 'needs implemented' }
+
 =head3 generate_user_line
 
 Generate a line for both the user and shadow file.

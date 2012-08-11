@@ -157,6 +157,17 @@ sub grab_all_users
     return @users;
 }
 
+=head3 grab_all_hosts
+
+=cut
+
+sub grab_all_hosts
+{
+    my $self = shift;
+    my $sysdir = $self->sysdir;
+    return Load($self->read_file_contents("$sysdir/hosts.conf")) || {};
+}
+
 =head3 grab_all_groups
 
 Returns array of groups

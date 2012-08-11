@@ -247,7 +247,7 @@ sub main
     {
         die "need to specify host\n" if $host eq '1';
 
-        my $hosts = Load(Sysync->read_file_contents("$sysdir/hosts.conf")) || {};
+        my $hosts = Load($sysync->read_file_contents("$sysdir/hosts.conf")) || {};
 
         my %pids;
 
@@ -536,7 +536,7 @@ sub _parse_options
     for my $option (keys %options)
     {
         die("[$0] `$option` is an invalid option\n")
-            unless (grep { $_ eq $option } @acceptable_options)
+            unless (grep { $_ eq $option } @acceptable_options);
     }
 
     return \%options;
