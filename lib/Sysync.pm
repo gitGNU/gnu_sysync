@@ -2,25 +2,6 @@ package Sysync;
 use strict;
 use Digest::MD5 qw(md5_hex);
 
-# Sysync
-# 
-# Copyright (C) 2012 Ohio-Pennsylvania Software, LLC.
-#
-# This file is part of sysync.
-# 
-# sysync is free software: you can redistribute it and/or modify
-# it under the terms of the GNU Affero General Public License as
-# published by the Free Software Foundation, either version 3 of the
-# License, or (at your option) any later version.
-# 
-# sysync is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU Affero General Public License for more details.
-# 
-# You should have received a copy of the GNU Affero General Public License
-# along with this program.  If not, see <http://www.gnu.org/licenses/>.
-
 =head2 METHODS
 
 =head3 new
@@ -31,9 +12,14 @@ Creates a new Sysync object.
 
 sub new
 {
-    my $self = {};
+    my ($class, $params) = @_;
+    my $self = {
+        sysdir      => $params->{sysdir},
+        stagedir    => ($params->{stagedir} || "$params->{sysdir}/stage"),
+        salt_prefix => (exists($params->{salt_prefix}) ? $params->{salt_prefix} : '$6$'),
+    };
 
-    bless($self);
+    bless($self, $class);
 
     return $self;
 }
@@ -50,7 +36,7 @@ sub sysdir { shift->{sysdir} }
 
 =cut
 
-sub stagedir { join('/', shift->sysdir, 'stage' ) }
+sub stagedir { $_[0]->{stagedir} || join('/', $_[0]->sysdir, 'stage' ) }
 
 =head3 get_user_password
 
@@ -70,7 +56,7 @@ Returns array of all groups.
 
 =cut
 
-sub grab_all_goups { die 'needs implemented' }
+sub grab_all_groups { die 'needs implemented' }
 
 =head3 generate_user_line
 
@@ -134,18 +120,6 @@ Returns true if host is valid.
 =cut
 
 sub is_valid_host { die 'needs implemented' }
-
-=head3 generate_user_line
-
-=cut 
-
-sub generate_user_line { die 'needs implemented' }
-
-=head3 generate_group_line
-
-=cut 
-
-sub generate_group_line { die 'needs implemented' }
 
 =head3 get_host_ent
 
@@ -214,6 +188,8 @@ sub update_all_hosts
     # first, build staging directories
     my @hosts = keys %{ $hosts->{hosts} || {} };
 
+    my $stagedir = $self->stagedir;
+
     my $r = 0;
 
     for my $host (@hosts)
@@ -257,7 +233,7 @@ sub update_all_hosts
         }
 
         # write host files
-        my $ent_data = get_host_ent($host);
+        my $ent_data = $self->get_host_ent($host);
 
         next unless $ent_data;
 
@@ -312,7 +288,7 @@ sub write_file_contents
 
     if (-e $file)
     {
-        if (md5_hex($data) eq md5_hex($self->get_file_contents($file)))
+        if (md5_hex($data) eq md5_hex($self->read_file_contents($file)))
         {
             return;
         }
@@ -343,3 +319,34 @@ sub read_file_contents
 }
 
 1;
+
+
+=head1 COPYRIGHT
+
+2012 Ohio-Pennsylvania Software, LLC.
+
+=head1 LICENSE
+
+ Copyright (C) 2012 Ohio-Pennsylvania Software, LLC.
+
+ This file is part of Sysync.
+ 
+ Sysync is free software: you can redistribute it and/or modify
+ it under the terms of the GNU Affero General Public License as
+ published by the Free Software Foundation, either version 3 of the
+ License, or (at your option) any later version.
+ 
+ Sysync is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU Affero General Public License for more details.
+ 
+ You should have received a copy of the GNU Affero General Public License
+ along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+=head1 AUTHOR
+
+Michael J. Flickinger, C<< <mjflick@gnu.org> >>
+
+=cut
+

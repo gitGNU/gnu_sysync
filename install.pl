@@ -22,7 +22,6 @@ use strict;
 
 use File::Copy;
 use Digest::MD5 qw(md5_hex);
-use Term::ReadKey;
 use YAML;
 
 my $sysdir = '/var/sysync';
@@ -65,6 +64,9 @@ sub main
 
     copy('./defaults/hosts.conf', "$sysdir/hosts.conf")
         unless -e "$sysdir/hosts.conf";
+
+    copy('./defaults/sysync.conf', "$sysdir/sysync.conf")
+        unless -e "$sysdir/sysync.conf";
     
     copy('./defaults/default.conf', "$sysdir/hosts/default.conf")
         unless -e "$sysdir/hosts/default.conf";

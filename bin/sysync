@@ -25,14 +25,12 @@ use Digest::MD5 qw(md5_hex);
 use Time::HiRes 'usleep';
 use POSIX ":sys_wait_h";
 
+use Sysync;
 use IPC::Open3;
 use YAML;
 
 my $default_sleep = 1800;
 my $max_workers   = 10;
-my $sysdir        = '/var/sysync';
-my $stagedir      = '/var/sysync/stage';
-
 my $editor = $ENV{EDITOR} || 'vi';
 
 die "sysync may only be ran as root\n" unless $< == 0;
@@ -43,10 +41,30 @@ my @TRAILING_ARGS;
 open(LOG, ">/dev/null");
 *LOG = *STDERR if $ENV{DEBUG};
 
+my $sysdir; 
+my $stagedir;
+my $sysync;
+
 sub main
 {
     # grab options
     my $options = _parse_options();
+    my $config  =
+        Load(Sysync->read_file_contents($options->{config} || '/var/sysync/sysync.conf'));
+
+    my $backend_module = $config->{module};
+
+    eval("use $backend_module");
+
+    if ($@)
+    {
+        die "Could not load $backend_module\n";
+    }
+
+    $sysync = $backend_module->new($config);
+
+    $sysdir   = $sysync->sysdir;
+    $stagedir = $sysync->stagedir;
 
     if (my $username = $options->{adduser})
     {
@@ -193,7 +211,7 @@ sub main
         system('stty','echo');
 
         print "\n";
-        my $current_pw = _get_file_contents("$sysdir/users/$username.passwd");
+        my $current_pw = $sysync->read_file_contents("$sysdir/users/$username.passwd");
 
         if (crypt($password, $current_pw) eq $current_pw)
         {
@@ -216,7 +234,7 @@ sub main
 
         for my $username (_grab_all_users())
         {
-            my $user = Load(_get_file_contents("$sysdir/users/$username.conf"));
+            my $user = Load($sysync->read_file_contents("$sysdir/users/$username.conf"));
             for my $key (@{ $user->{ssh_keys} || [] })
             {
                 $out .= qq[command="sudo /usr/sbin/sysync --usersetpassword=$username" $key\n];
@@ -229,7 +247,8 @@ sub main
     {
         die "need to specify host\n" if $host eq '1';
 
-        my $hosts = Load(_get_file_contents("$sysdir/hosts.conf")) || {};
+        my $hosts = Load(Sysync->read_file_contents("$sysdir/hosts.conf")) || {};
+
         my %pids;
 
         # make 'all' hosts directive work
@@ -341,7 +360,6 @@ sub _sync_host
             _log("rsyncing [$host => $address]\n$files");
         }
     } 
-
 }
 
 sub _system
@@ -447,7 +465,7 @@ gid: $gid
 
 }
 
-sub getnextuid { _get_file_contents("$sysdir/.maxuid") || 1001 }
+sub getnextuid { $sysync->read_file_contents("$sysdir/.maxuid") || 1001 }
 
 sub incrementuid
 {
@@ -471,6 +489,7 @@ sub _parse_options
     my @acceptable_options = qw(
         init adduser edituser interactive
         deluser
+        config
         addgroup editgroup
         delgroup
         addhost edithost
@@ -559,7 +578,8 @@ sub _prompt_for_password
     {
         my $salt = rand() . $$ . rand();
         $salt =~ s/\.//g;
-        $salt = '$6$'.md5_hex($salt);
+        my $salt_prefix = $sysync->{salt_prefix};
+        $salt = $salt_prefix . md5_hex($salt);
 
         return crypt($password, $salt);
     }
@@ -572,7 +592,7 @@ sub _prompt_for_password
 
 sub usage
 {
-    warn "usage: $0 --interactive [command]\n";
+    warn "usage: $0 [--interactive] [command]\n";
     warn "Commands:\n";
     warn "   --adduser=[user]\n";
     warn "   --edituser=[user]\n";
@@ -590,6 +610,7 @@ sub usage
     warn "   --usersetpasswordauthkeys returns authorized_keys file for all users to set their password\n";
     warn "   --daemon (run in daemon mode)\n";
     warn "   --cmd=[host,host2] [command]\n";
+    warn "   --config=/path/to/config\n";
     warn "   --refresh-now (by default, sysync-daemon syncs everything every 30 minutes, this forces a refresh)\n";
 }
 
@@ -601,7 +622,7 @@ sub edit_yaml_file
     system($editor, "/tmp/$tmp_file");
 
     do {
-        eval { Load(Sysync::read_file_contents("/tmp/$tmp_file")) };
+        eval { Load($sysync->read_file_contents("/tmp/$tmp_file")) };
         if ($@)
         {
             print "Unable to parse file contents, please re-edit: $@\n";
@@ -625,7 +646,6 @@ sub edit_yaml_file
 }
 
 exit __PACKAGE__->main;
-
 
 =head1 COPYRIGHT
 

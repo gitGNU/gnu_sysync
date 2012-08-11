@@ -1,38 +1,20 @@
 package Sysync::File;
 use strict;
+use YAML;
 use base 'Sysync';
-
-# Sysync
-# 
-# Copyright (C) 2012 Ohio-Pennsylvania Software, LLC.
-#
-# This file is part of sysync.
-# 
-# sysync is free software: you can redistribute it and/or modify
-# it under the terms of the GNU Affero General Public License as
-# published by the Free Software Foundation, either version 3 of the
-# License, or (at your option) any later version.
-# 
-# sysync is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU Affero General Public License for more details.
-# 
-# You should have received a copy of the GNU Affero General Public License
-# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 sub get_hosts
 {
     my $self = shift;
-
-    return Load($self->get_file_contents("$sysdir/hosts.conf")) || {};
+    my $sysdir = $self->sysdir;
+    return Load($self->read_file_contents("$sysdir/hosts.conf")) || {};
 }
 
 
 sub get_user_password
 {
     my ($self, $username) = @_;
-
+    my $sysdir = $self->sysdir;
     return $self->read_file_contents("$sysdir/users/$username.passwd");
 }
 
@@ -45,7 +27,7 @@ Returns true if host is valid.
 sub is_valid_host
 {
     my ($self, $host) = @_;
-
+    my $sysdir = $self->sysdir;
     return -e "$sysdir/hosts/$host.conf";
 }
 
@@ -59,16 +41,17 @@ sub grab_host_users_groups
 {
     my ($self, $host) = @_;
 
+    my $sysdir = $self->sysdir;
     my $default_host_config = {};
     if (-e "$sysdir/hosts/default.conf")
     {
-        $default_host_config = Load($self->get_file_contents("$sysdir/hosts/default.conf"));
+        $default_host_config = Load($self->read_file_contents("$sysdir/hosts/default.conf"));
     }
 
     my $host_config = {};
     if ($self->is_valid_host($host))
     {
-        $host_config = Load($self->get_file_contents("$sysdir/hosts/$host.conf"));
+        $host_config = Load($self->read_file_contents("$sysdir/hosts/$host.conf"));
     }
 
     my (%host_users, %host_groups);
@@ -112,7 +95,7 @@ sub grab_host_users_groups
         # trust what we have if something is degined already
         next if $host_groups{$group};
 
-        my $group = Load($self->get_file_contents("$sysdir/groups/$group.conf"));
+        my $group = Load($self->read_file_contents("$sysdir/groups/$group.conf"));
         $host_groups{$group->{groupname}} = $group;
     }
 
@@ -145,10 +128,10 @@ sub grab_host_users_groups
 sub grab_user
 {
     my ($self, $username) = @_;
-
+    my $sysdir = $self->sysdir;
     return unless -e "$sysdir/users/$username.conf";
 
-    my $user_conf = Load($self->get_file_contents("$sysdir/users/$username.conf"));
+    my $user_conf = Load($self->read_file_contents("$sysdir/users/$username.conf"));
 
     return $user_conf;
 }
@@ -160,7 +143,7 @@ sub grab_user
 sub grab_all_users
 {
     my $self = shift;
-
+    my $sysdir = $self->sysdir;
     my @users;
     opendir(DIR, "$sysdir/users");
     while (my $file = readdir(DIR))
@@ -183,7 +166,7 @@ Returns array of groups
 sub grab_all_groups
 {
     my $self = shift;
-
+    my $sysdir = $self->sysdir;
     my @groups;
     opendir(DIR, "$sysdir/groups");
     while (my $file = readdir(DIR))
@@ -205,10 +188,10 @@ sub grab_all_groups
 sub grab_users_from_group
 {
     my ($self, $group) = @_;
-
+    my $sysdir = $self->sysdir;
     return () unless -e "$sysdir/groups/$group.conf";
 
-    my $group_conf = Load($self->get_file_contents("$sysdir/groups/$group.conf"));
+    my $group_conf = Load($self->read_file_contents("$sysdir/groups/$group.conf"));
 
     return () unless $group_conf->{users} and ref($group_conf->{users}) eq 'ARRAY';
 
@@ -216,4 +199,34 @@ sub grab_users_from_group
 }
 
 1;
+
+
+=head1 COPYRIGHT
+
+2012 Ohio-Pennsylvania Software, LLC.
+
+=head1 LICENSE
+
+ Copyright (C) 2012 Ohio-Pennsylvania Software, LLC.
+
+ This file is part of Sysync.
+ 
+ Sysync is free software: you can redistribute it and/or modify
+ it under the terms of the GNU Affero General Public License as
+ published by the Free Software Foundation, either version 3 of the
+ License, or (at your option) any later version.
+ 
+ Sysync is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU Affero General Public License for more details.
+ 
+ You should have received a copy of the GNU Affero General Public License
+ along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+=head1 AUTHOR
+
+Michael J. Flickinger, C<< <mjflick@gnu.org> >>
+
+=cut
 
