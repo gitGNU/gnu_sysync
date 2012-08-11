@@ -209,6 +209,36 @@ sub grab_users_from_group
     return @{ $group_conf->{users} };
 }
 
+=head3 must_refresh
+
+=cut
+
+sub must_refresh
+{
+    my $self = shift;
+    my $stagedir = $self->stagedir;
+
+    if (scalar @_ >= 1)
+    {
+        if ($_[0])
+        {
+            open(F, ">$stagedir/.refreshnow");
+            close(F);
+            return 1;
+        }
+        else
+        {
+            unlink("$stagedir/.refreshnow");
+            return 0;
+        }
+    }
+    else
+    {
+        return -e "$stagedir/.refreshnow";
+    }
+}
+
+
 1;
 
 

@@ -78,7 +78,7 @@ sub main
         edit_yaml_file("$sysdir/users/$username.conf") if $options->{interactive};
         print "User $username added\n";
         sunlock();
-        _touch("$stagedir/.refreshnow");
+        $sysync->must_refresh(1);
     }
     elsif (my $username = $options->{edituser})
     {
@@ -87,7 +87,7 @@ sub main
         slock();
         edit_yaml_file("$sysdir/users/$username.conf");
         sunlock();
-        _touch("$stagedir/.refreshnow");
+        $sysync->must_refresh(1);
     }
     elsif (my $username = $options->{deluser})
     {
@@ -97,7 +97,7 @@ sub main
         unlink("$sysdir/users/$username.conf");
         print "$username deleted\n";
         sunlock();
-        _touch("$stagedir/.refreshnow");
+        $sysync->must_refresh(1);
     }
     elsif (my $group = $options->{addgroup})
     {
@@ -112,7 +112,7 @@ sub main
         edit_yaml_file("$sysdir/groups/$group.conf") if $options->{interactive};
         print "Group $group added\n";
         sunlock();
-        _touch("$stagedir/.refreshnow");
+        $sysync->must_refresh(1);
     }
     elsif (my $group = $options->{editgroup})
     {
@@ -121,7 +121,7 @@ sub main
         slock();
         edit_yaml_file("$sysdir/groups/$group.conf");
         sunlock();
-        _touch("$stagedir/.refreshnow");
+        $sysync->must_refresh(1);
     }
     elsif (my $group = $options->{delgroup})
     {
@@ -131,7 +131,7 @@ sub main
         unlink("$sysdir/groups/$group.conf");
         print "$group deleted\n";
         sunlock();
-        _touch("$stagedir/.refreshnow");
+        $sysync->must_refresh(1);
     }
     elsif (my $host = $options->{addhost})
     {
@@ -144,7 +144,7 @@ sub main
         edit_yaml_file("$sysdir/hosts/$host.conf") if $options->{interactive};
         print "Host $host added\n";
         sunlock();
-        _touch("$stagedir/.refreshnow");
+        $sysync->must_refresh(1);
     }
     elsif (my $host = $options->{edithost})
     {
@@ -153,7 +153,7 @@ sub main
         slock();
         edit_yaml_file("$sysdir/hosts/$host.conf");
         sunlock();
-        _touch("$stagedir/.refreshnow");
+        $sysync->must_refresh(1);
     }
     elsif (my $host = $options->{delhost})
     {
@@ -163,18 +163,18 @@ sub main
         unlink("$sysdir/hosts/$host.conf");
         print "$host deleted\n";
         sunlock();
-        _touch("$stagedir/.refreshnow");
+        $sysync->must_refresh(1);
     }
     elsif ($options->{edithosts})
     {
         slock();
         edit_yaml_file("$sysdir/hosts.conf");
         sunlock();
-        _touch("$stagedir/.refreshnow");
+        $sysync->must_refresh(1);
     }
     elsif ($options->{'refresh-now'})
     {
-        _touch("$stagedir/.refreshnow");
+        $sysync->must_refresh(1);
         print "Refresh requested.\n";
     }
     elsif ($options->{mkpasswd})
@@ -195,7 +195,7 @@ sub main
             print F $passwd;
             close(F);
             print "Successfully updated password for $username\n";
-            _touch("$stagedir/.refreshnow");
+            $sysync->must_refresh(1);
         }
     }
     elsif (my $username = $options->{usersetpassword})
@@ -221,7 +221,7 @@ sub main
             print F $passwd;
             close(F);
             print "Successfully updated password for $username\n";
-            _touch("$stagedir/.refreshnow");
+            $sysync->must_refresh(1);
         }
         else
         {
@@ -478,8 +478,6 @@ sub incrementuid
 
 sub slock { die "lock file exists $sysdir/.lock" if -e "$sysdir/.lock"; `touch $sysdir/.lock` }
 sub sunlock { unlink("$sysdir/.lock") } 
-
-sub _touch { open(F, '>'.shift); close(F); }
 
 # quick and dirty
 sub _parse_options
