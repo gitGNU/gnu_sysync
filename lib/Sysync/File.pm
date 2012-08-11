@@ -1,21 +1,68 @@
+package Sysync::File;
+use strict;
+use base 'Sysync';
 
-### 
-### _grab_host_users
-###
-sub _grab_host_users_groups
+# Sysync
+# 
+# Copyright (C) 2012 Ohio-Pennsylvania Software, LLC.
+#
+# This file is part of sysync.
+# 
+# sysync is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as
+# published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+# 
+# sysync is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+sub get_hosts
 {
-    my $host = shift;
+    my $self = shift;
+
+    return Load($self->get_file_contents("$sysdir/hosts.conf")) || {};
+}
+
+
+sub get_user_password
+{
+    my ($self, $username) = @_;
+
+    return $self->read_file_contents("$sysdir/users/$username.passwd");
+}
+
+=head3 is_valid_host
+
+Returns true if host is valid.
+
+=cut
+
+sub is_valid_host
+{
+    my ($self, $host) = @_;
+
+    return -e "$sysdir/hosts/$host.conf";
+}
+
+sub grab_host_users_groups
+{
+    my ($self, $host) = @_;
 
     my $default_host_config = {};
     if (-e "$sysdir/hosts/default.conf")
     {
-        $default_host_config = Load(_get_file_contents("$sysdir/hosts/default.conf"));
+        $default_host_config = Load($self->get_file_contents("$sysdir/hosts/default.conf"));
     }
 
     my $host_config = {};
-    if (-e "$sysdir/hosts/$host.conf")
+    if ($self->is_valid_host($host))
     {
-        $host_config = Load(_get_file_contents("$sysdir/hosts/$host.conf"));
+        $host_config = Load($self->get_file_contents("$sysdir/hosts/$host.conf"));
     }
 
     my (%host_users, %host_groups);
@@ -59,7 +106,7 @@ sub _grab_host_users_groups
         # trust what we have if something is degined already
         next if $host_groups{$group};
 
-        my $group = Load(_get_file_contents("$sysdir/groups/$group.conf"));
+        my $group = Load($self->get_file_contents("$sysdir/groups/$group.conf"));
         $host_groups{$group->{groupname}} = $group;
     }
 
@@ -91,7 +138,7 @@ sub _grab_user
 
     return unless -e "$sysdir/users/$user.conf";
 
-    my $user_conf = Load(_get_file_contents("$sysdir/users/$user.conf"));
+    my $user_conf = Load($self->get_file_contents("$sysdir/users/$user.conf"));
 
     return $user_conf;
 }
@@ -133,7 +180,7 @@ sub _grab_users_from_group
 
     return () unless -e "$sysdir/groups/$group.conf";
 
-    my $group_conf = Load(_get_file_contents("$sysdir/groups/$group.conf"));
+    my $group_conf = Load($self->get_file_contents("$sysdir/groups/$group.conf"));
 
     return () unless $group_conf->{users} and ref($group_conf->{users}) eq 'ARRAY';
 

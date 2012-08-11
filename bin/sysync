@@ -523,6 +523,20 @@ sub _parse_options
     return \%options;
 }
 
+$SIG{CHLD} = \&REAPER;
+
+sub REAPER
+{
+    my $kid;
+
+    while (($kid = waitpid(-1, &WNOHANG)) > 0)
+    { 
+
+    }
+    $current_workers--;
+    $SIG{CHLD} = \&REAPER;
+}
+
 sub _prompt_for_password
 {
     print "Type new password: ";

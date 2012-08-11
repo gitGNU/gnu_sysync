@@ -1,9 +1,72 @@
 package Sysync;
 use strict;
+use Digest::MD5 qw(md5_hex);
+
+# Sysync
+# 
+# Copyright (C) 2012 Ohio-Pennsylvania Software, LLC.
+#
+# This file is part of sysync.
+# 
+# sysync is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as
+# published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+# 
+# sysync is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+=head2 METHODS
+
+=head3 new
+
+Creates a new Sysync object.
+
+=cut
+
+sub new
+{
+    my $self = {};
+
+    bless($self);
+
+    return $self;
+}
+
+=head3 sysdir
+
+Returns the base system directory for sysync.
+
+=cut
+
+sub sysdir { shift->{sysdir} }
+
+=head3 stagedir
+
+=cut
+
+sub stagedir { join('/', shift->sysdir, 'stage' ) }
+
+=head3 get_user_password
+
+=cut
+
+sub get_user_password { die 'needs implemented' }
+
+=head3 generate_user_line
+
+Generate a line for both the user and shadow file.
+
+=cut
 
 sub generate_user_line
 {
-    my ($user, $what) = @_;
+    my ($self, $user, $what) = @_;
 
     my $gid      = $user->{gid} || $user->{uid};
     my $fullname = $user->{fullname} || $user->{username};
@@ -16,7 +79,7 @@ sub generate_user_line
     }
     else
     {
-        my $p = read_file_contents("$sysdir/users/$user->{username}.passwd");
+        my $p = $self->get_user_password($user->{username});
 
         $password = $p if $p;
     }
@@ -36,28 +99,59 @@ sub generate_user_line
     return $line;
 }
 
+=head3 generate_group_line
+
+Generate a line for the group file.
+
+=cut
+
 sub generate_group_line
 {
-    my $group    = shift;
+    my ($self, $group) = @_;
 
     my $users = join(',', @{$group->{users} || []}) || '';
     return join(':', $group->{groupname}, 'x', $group->{gid}, $users);
 }
 
+=head3 is_valid_host
+
+Returns true if host is valid.
+
+=cut
+
+sub is_valid_host { die 'needs implemented' }
+
+=head3 generate_user_line
+
+=cut 
+
+sub generate_user_line { die 'needs implemented' }
+
+=head3 generate_group_line
+
+=cut 
+
+sub generate_group_line { die 'needs implemented' }
+
+=head3 get_host_ent
+
+For a generate all of the password data, including ssh keys, for a specific host.
+
+=cut
+
 sub get_host_ent
 {
-    my $host = shift;
+    my ($self, $host) = @_;
 
-    return unless "$sysdir/hosts/$host.conf";
-
+    return unless $self->is_valid_host($host);
     
-    my $data = _grab_host_users_groups($host);
-    my @users = @{$data->{users} || []};
+    my $data   = $self->grab_host_users_groups($host);
+    my @users  = @{$data->{users} || []};
     my @groups = @{$data->{groups} || []};
 
-    my $passwd = join("\n", map { _generate_user_line($_, 'passwd') } @users) . "\n";
-    my $shadow = join("\n", map { _generate_user_line($_, 'shadow') } @users) . "\n";
-    my $group  = join("\n", map { _generate_group_line($_) } @groups) . "\n";
+    my $passwd = join("\n", map { $self->generate_user_line($_, 'passwd') } @users) . "\n";
+    my $shadow = join("\n", map { $self->generate_user_line($_, 'shadow') } @users) . "\n";
+    my $group  = join("\n", map { $self->generate_group_line($_) } @groups) . "\n";
 
     my @ssh_keys;
     for my $user (@users)
@@ -84,10 +178,24 @@ sub get_host_ent
     };
 }
 
+=head3 get_hosts
+
+=cut
+
+sub get_hosts { die 'needs implemented' }
+
+=head3 update_all_hosts
+
+Iterate through every host and build password files.
+
+=cut
+
 sub update_all_hosts
 {
+    my ($self, %params) = @_;
+
     # grab list of hosts along with image name
-    my $hosts = shift || Load(_get_file_contents("$sysdir/hosts.conf")) || {};
+    my $hosts = $params{hosts} || $self->get_hosts;
 
     # first, build staging directories
     my @hosts = keys %{ $hosts->{hosts} || {} };
@@ -96,7 +204,7 @@ sub update_all_hosts
 
     for my $host (@hosts)
     {
-        next unless -e "$sysdir/hosts/$host.conf";
+        next unless $self->is_valid_host($host);
 
         unless (-d "$stagedir/$host")
         {
@@ -145,7 +253,7 @@ sub update_all_hosts
             my $uid      = $key->{uid};
             my $text     = $key->{keys};
 
-            if (_write_file_contents("$stagedir/$host/etc/ssh/authorized_keys/$username", $text))
+            if ($self->write_file_contents("$stagedir/$host/etc/ssh/authorized_keys/$username", $text))
             {
                 chmod 0600, "$stagedir/$host/etc/ssh/authorized_keys/$username";
                 chown $uid, 0, "$stagedir/$host/etc/ssh/authorized_keys/$username";
@@ -153,21 +261,21 @@ sub update_all_hosts
             }
         }
 
-        if (_write_file_contents("$stagedir/$host/etc/passwd", $ent_data->{passwd}))
+        if ($self->write_file_contents("$stagedir/$host/etc/passwd", $ent_data->{passwd}))
         {
             chmod 0644, "$stagedir/$host/etc/passwd";
             chown 0, 0, "$stagedir/$host/etc/passwd";
             $r++;
         }
 
-        if (_write_file_contents("$stagedir/$host/etc/group", $ent_data->{group}))
+        if ($self->write_file_contents("$stagedir/$host/etc/group", $ent_data->{group}))
         {
             chmod 0644, "$stagedir/$host/etc/group";
             chown 0, 0, "$stagedir/$host/etc/group";
             $r++;
         }
 
-        if (_write_file_contents("$stagedir/$host/etc/shadow", $ent_data->{shadow}))
+        if ($self->write_file_contents("$stagedir/$host/etc/shadow", $ent_data->{shadow}))
         {
             chmod 0640, "$stagedir/$host/etc/shadow";
             chown 0, 42, "$stagedir/$host/etc/shadow";
@@ -178,21 +286,25 @@ sub update_all_hosts
     return $r;
 }
 
+=head3 write_file_contents
+
+=cut
+
 sub write_file_contents
 {
-    my ($file, $data) = @_;
+    my ($self, $file, $data) = @_;
 
     # check to see if this differs
 
     if (-e $file)
     {
-        if (md5_hex($data) eq md5_hex(_get_file_contents($file)))
+        if (md5_hex($data) eq md5_hex($self->get_file_contents($file)))
         {
             return;
         }
     }
 
-    _log("writing: $file");
+    $self->log("writing: $file");
 
     open(F, "> $file") or die $!;
     print F $data;
@@ -201,9 +313,13 @@ sub write_file_contents
     return 1;
 }
 
+=head3 read_file_contents
+
+=cut
+
 sub read_file_contents
 {
-    my $file = shift;
+    my ($self, $file) = @_;
 
     open(my $fh, $file);
     my @content = <$fh>;
@@ -212,6 +328,4 @@ sub read_file_contents
     return join('', @content);
 }
 
-
 1;
-
