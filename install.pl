@@ -50,6 +50,9 @@ sub main
     copy('./bin/sysync', '/usr/sbin/sysync');
     chmod 700, '/usr/sbin/sysync';
 
+    copy('./bin/sysyncd', '/usr/sbin/sysyncd');
+    chmod 700, '/usr/sbin/sysyncd';
+
     copy('./defaults/sysync', '/etc/init.d/sysync');
     chmod 755, '/etc/init.d/sysync';
 

@@ -80,6 +80,13 @@ Returns all hosts.
 
 sub grab_all_hosts { die 'needs implemented' }
 
+
+=head3 must_refresh
+
+=cut
+
+sub must_refresh { die 'needs implemented' }
+
 =head3 generate_user_line
 
 Generate a line for both the user and shadow file.
