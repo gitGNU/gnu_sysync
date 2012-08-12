@@ -66,7 +66,7 @@ sub main
     $sysdir   = $sysync->sysdir;
     $stagedir = $sysync->stagedir;
 
-    if (my $username = $options->{adduser})
+    if ((my $username = $options->{adduser}) and ref $sysync eq 'Sysync::File')
     {
         die "Username must be specified\n" if $username eq '1';
         die "User $username already exists\n" if -e "$sysdir/users/$username.conf";
@@ -80,7 +80,7 @@ sub main
         sunlock();
         $sysync->must_refresh(1);
     }
-    elsif (my $username = $options->{edituser})
+    elsif ((my $username = $options->{edituser}) and ref $sysync eq 'Sysync::File')
     {
         die "Username must be specified\n" if $username eq '1';
         die "User $username does not exists\n" unless -e "$sysdir/users/$username.conf";
@@ -89,7 +89,7 @@ sub main
         sunlock();
         $sysync->must_refresh(1);
     }
-    elsif (my $username = $options->{deluser})
+    elsif ((my $username = $options->{deluser}) and ref $sysync eq 'Sysync::File')
     {
         die "Username must be specified\n" if $username eq '1';
         die "User $username does not exists\n" unless -e "$sysdir/users/$username.conf";
@@ -99,7 +99,7 @@ sub main
         sunlock();
         $sysync->must_refresh(1);
     }
-    elsif (my $group = $options->{addgroup})
+    elsif ((my $group = $options->{addgroup}) and ref $sysync eq 'Sysync::File')
     {
         die "Group must be specified\n" if $group eq '1';
         die "'all' is an invalid group name\n" if $group eq 'all';
@@ -114,7 +114,7 @@ sub main
         sunlock();
         $sysync->must_refresh(1);
     }
-    elsif (my $group = $options->{editgroup})
+    elsif ((my $group = $options->{editgroup}) and ref $sysync eq 'Sysync::File')
     {
         die "Group must be specified\n" if $group eq '1';
         die "Group $group does not exists\n" unless -e "$sysdir/groups/$group.conf";
@@ -123,7 +123,7 @@ sub main
         sunlock();
         $sysync->must_refresh(1);
     }
-    elsif (my $group = $options->{delgroup})
+    elsif ((my $group = $options->{delgroup}) and ref $sysync eq 'Sysync::File')
     {
         die "Group must be specified\n" if $group eq '1';
         die "Group $group does not exists\n" unless -e "$sysdir/groups/$group.conf";
@@ -133,7 +133,7 @@ sub main
         sunlock();
         $sysync->must_refresh(1);
     }
-    elsif (my $host = $options->{addhost})
+    elsif ((my $host = $options->{addhost}) and ref $sysync eq 'Sysync::File')
     {
         die "Host must be specified\n" if $host eq '1';
         die "Host $host already exists\n" if -e "$sysdir/hosts/$host.conf";
@@ -146,7 +146,7 @@ sub main
         sunlock();
         $sysync->must_refresh(1);
     }
-    elsif (my $host = $options->{edithost})
+    elsif ((my $host = $options->{edithost}) and ref $sysync eq 'Sysync::File')
     {
         die "Host must be specified\n" if $host eq '1';
         die "Host $host does not exists\n" unless -e "$sysdir/hosts/$host.conf";
@@ -155,7 +155,7 @@ sub main
         sunlock();
         $sysync->must_refresh(1);
     }
-    elsif (my $host = $options->{delhost})
+    elsif ((my $host = $options->{delhost}) and ref $sysync eq 'Sysync::File')
     {
         die "Host must be specified\n" if $host eq '1';
         die "Host $host does not exists\n" unless -e "$sysdir/hosts/$host.conf";
@@ -165,14 +165,14 @@ sub main
         sunlock();
         $sysync->must_refresh(1);
     }
-    elsif ($options->{edithosts})
+    elsif (($options->{edithosts}) and ref $sysync eq 'Sysync::File')
     {
         slock();
         edit_yaml_file("$sysdir/hosts.conf");
         sunlock();
         $sysync->must_refresh(1);
     }
-    elsif ($options->{'refresh-now'})
+    elsif ($options->{'refresh'})
     {
         $sysync->must_refresh(1);
         print "Refresh requested.\n";
@@ -190,10 +190,10 @@ sub main
         else
         {
             die "user does not exist\n" unless -e "$sysdir/users/$username.conf";
+
             my $passwd = _prompt_for_password();
-            open(F, ">$sysdir/users/$username.passwd");
-            print F $passwd;
-            close(F);
+            $sysync->set_user_password($username, $passwd);
+
             print "Successfully updated password for $username\n";
             $sysync->must_refresh(1);
         }
@@ -216,11 +216,7 @@ sub main
         if (crypt($password, $current_pw) eq $current_pw)
         {
             my $passwd = _prompt_for_password();
-
-            open(F, ">$sysdir/users/$username.passwd");
-            print F $passwd;
-            close(F);
-            print "Successfully updated password for $username\n";
+            $sysync->set_user_password($username, $passwd);
             $sysync->must_refresh(1);
         }
         else
@@ -232,9 +228,10 @@ sub main
     {
         my $out = '';
 
-        for my $username (_grab_all_users())
+        for my $username ($sysync->get_all_users)
         {
-            my $user = Load($sysync->read_file_contents("$sysdir/users/$username.conf"));
+            my $user = $sysync->get_user($username);
+
             for my $key (@{ $user->{ssh_keys} || [] })
             {
                 $out .= qq[command="sudo /usr/sbin/sysync --usersetpassword=$username" $key\n];
@@ -247,8 +244,7 @@ sub main
     {
         die "need to specify host\n" if $host eq '1';
 
-        my $hosts = Load($sysync->read_file_contents("$sysdir/hosts.conf")) || {};
-
+        my $hosts = $sysync->get_all_hosts;
         my %pids;
 
         # make 'all' hosts directive work
@@ -257,7 +253,7 @@ sub main
 
         for my $host (split(',', $host_list))
         {
-            die "host does not exist\n" unless -e "$sysdir/hosts/$host.conf";
+            die "host does not exist\n" unless $sysync->is_valid_host($host);
             die "host $host not mapped to addresses\n" unless $hosts->{hosts}{$host};
         }
 
@@ -309,6 +305,10 @@ sub main
     elsif ($options->{daemon})
     {
         daemon();
+    }
+    elsif ($options->{help})
+    {
+        usage();
     }
     else
     {
@@ -487,6 +487,7 @@ sub _parse_options
     my @acceptable_options = qw(
         init adduser edituser interactive
         deluser
+        help
         config
         addgroup editgroup
         delgroup
@@ -497,9 +498,8 @@ sub _parse_options
         passwd
         usersetpassword
         usersetpasswordauthkeys
-        daemon
         cmd
-        refresh-now
+        refresh
     );
 
     my @OPTS = @ARGV;
@@ -592,24 +592,31 @@ sub usage
 {
     warn "usage: $0 [--interactive] [command]\n";
     warn "Commands:\n";
-    warn "   --adduser=[user]\n";
-    warn "   --edituser=[user]\n";
-    warn "   --deluser=[user]\n";
-    warn "   --addgroup=[group]\n";
-    warn "   --editgroup=[group]\n";
-    warn "   --delgroup=[group]\n";
-    warn "   --addhost=[host]\n";
-    warn "   --edithost=[host]\n";
-    warn "   --delhost=[host]\n";
-    warn "   --edithosts (edit hosts.conf file)\n";
+    warn "   --help (show this)\n";
     warn "   --mkpasswd (return password via stdout)\n";
     warn "   --passwd=[user] (set a user's password)\n";
     warn "   --usersetpassword=[user] allow a user to set their own password\n";
     warn "   --usersetpasswordauthkeys returns authorized_keys file for all users to set their password\n";
-    warn "   --daemon (run in daemon mode)\n";
     warn "   --cmd=[host,host2] [command]\n";
     warn "   --config=/path/to/config\n";
-    warn "   --refresh-now (by default, sysync-daemon syncs everything every 30 minutes, this forces a refresh)\n";
+    warn "   --refresh (by default, sysync-daemon syncs everything every 30 minutes, this forces a refresh)\n";
+
+    if (ref $sysync eq 'Sysync::File')
+    {
+        warn "Administrative Commands (using Sysync::File):\n";
+        warn "   --adduser=[user]\n";
+        warn "   --adduser=[user]\n";
+        warn "   --edituser=[user]\n";
+        warn "   --deluser=[user]\n";
+        warn "   --addgroup=[group]\n";
+        warn "   --editgroup=[group]\n";
+        warn "   --delgroup=[group]\n";
+        warn "   --addhost=[host]\n";
+        warn "   --edithost=[host]\n";
+        warn "   --delhost=[host]\n";
+        warn "   --edithosts (edit hosts.conf file)\n";
+    }
+
 }
 
 sub edit_yaml_file

@@ -52,33 +52,60 @@ sub sysdir { shift->{sysdir} }
 
 sub stagedir { $_[0]->{stagedir} || join('/', $_[0]->sysdir, 'stage' ) }
 
+=head3 get_user
+
+Returns hashref of user information.
+
+=cut
+
+sub get_user { die 'needs implemented' }
+
 =head3 get_user_password
 
 =cut
 
 sub get_user_password { die 'needs implemented' }
 
-=head3 grab_users_from_group
+=head2 get_all_users
 
 =cut
 
-sub grab_users_from_group { die 'needs implemented' }
+sub get_all_users { die 'needs implemented' }
 
-=head3 grab_all_groups
+=head3 set_user_password
+
+=cut
+
+sub set_user_password { die 'needs implemented' }
+
+=head3 get_users_from_group
+
+=cut
+
+sub get_users_from_group { die 'needs implemented' }
+
+=head3 get_all_groups
 
 Returns array of all groups.
 
 =cut
 
-sub grab_all_groups { die 'needs implemented' }
+sub get_all_groups { die 'needs implemented' }
 
-=head3 grab_all_hosts
+=head3 get_all_hosts
 
 Returns all hosts.
 
 =cut
 
-sub grab_all_hosts { die 'needs implemented' }
+sub get_all_hosts { die 'needs implemented' }
+
+
+=head3 must_refresh
+
+=cut
+
+sub must_refresh { die 'needs implemented' }
 
 =head3 generate_user_line
 
@@ -155,7 +182,7 @@ sub get_host_ent
 
     return unless $self->is_valid_host($host);
     
-    my $data   = $self->grab_host_users_groups($host);
+    my $data   = $self->get_host_users_groups($host);
     my @users  = @{$data->{users} || []};
     my @groups = @{$data->{groups} || []};
 
@@ -204,7 +231,7 @@ sub update_all_hosts
 {
     my ($self, %params) = @_;
 
-    # grab list of hosts along with image name
+    # get list of hosts along with image name
     my $hosts = $params{hosts} || $self->get_hosts;
 
     # first, build staging directories

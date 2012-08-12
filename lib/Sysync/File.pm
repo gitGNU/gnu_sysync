@@ -18,6 +18,17 @@ sub get_user_password
     return $self->read_file_contents("$sysdir/users/$username.passwd");
 }
 
+sub set_user_password
+{
+    my ($self, $username, $passwd) = @_;
+    my $sysdir = $self->sysdir;
+    open(F, ">$sysdir/users/$username.passwd");
+    print F $passwd;
+    close(F);
+
+    return 1;
+}
+
 =head3 is_valid_host
 
 Returns true if host is valid.
@@ -31,13 +42,26 @@ sub is_valid_host
     return -e "$sysdir/hosts/$host.conf";
 }
 
-=head3 grab_host_users_groups
+=head3 is_valid_user
 
-Grab both users and groups for a specific host.
+Returns true if user is valid.
 
 =cut
 
-sub grab_host_users_groups
+sub is_valid_user
+{
+    my ($self, $username) = @_;
+    my $sysdir = $self->sysdir;
+    return -e "$sysdir/users/$username.conf";
+}
+
+=head3 get_host_users_groups
+
+Get both users and groups for a specific host.
+
+=cut
+
+sub get_host_users_groups
 {
     my ($self, $host) = @_;
 
@@ -70,16 +94,16 @@ sub grab_host_users_groups
         my @users;
         if ($group eq 'all')
         {
-            @users = $self->grab_all_users;
+            @users = $self->get_all_users;
         }
         else
         {
-            @users = $self->grab_users_from_group($group);
+            @users = $self->get_users_from_group($group);
         }
 
         for my $username (@users)
         {
-            my $user = $self->grab_user($username);
+            my $user = $self->get_user($username);
             next unless $user;
 
             $host_users{$username} = $user;
@@ -90,7 +114,7 @@ sub grab_host_users_groups
         map { $host_users{$_} } keys %host_users;
 
     # add all groups with applicable users
-    for my $group ($self->grab_all_groups)
+    for my $group ($self->get_all_groups)
     {
         # trust what we have if something is degined already
         next if $host_groups{$group};
@@ -121,11 +145,11 @@ sub grab_host_users_groups
     };
 }
 
-=head3 grab_user
+=head3 get_user
 
 =cut
 
-sub grab_user
+sub get_user
 {
     my ($self, $username) = @_;
     my $sysdir = $self->sysdir;
@@ -136,11 +160,11 @@ sub grab_user
     return $user_conf;
 }
 
-=head3 grab_all_users
+=head3 get_all_users
 
 =cut
 
-sub grab_all_users
+sub get_all_users
 {
     my $self = shift;
     my $sysdir = $self->sysdir;
@@ -157,24 +181,24 @@ sub grab_all_users
     return @users;
 }
 
-=head3 grab_all_hosts
+=head3 get_all_hosts
 
 =cut
 
-sub grab_all_hosts
+sub get_all_hosts
 {
     my $self = shift;
     my $sysdir = $self->sysdir;
     return Load($self->read_file_contents("$sysdir/hosts.conf")) || {};
 }
 
-=head3 grab_all_groups
+=head3 get_all_groups
 
 Returns array of groups
 
 =cut
 
-sub grab_all_groups
+sub get_all_groups
 {
     my $self = shift;
     my $sysdir = $self->sysdir;
@@ -191,12 +215,12 @@ sub grab_all_groups
     return @groups;
 }
 
-=head3 grab_users_from_group
+=head3 get_users_from_group
 
 
 =cut
 
-sub grab_users_from_group
+sub get_users_from_group
 {
     my ($self, $group) = @_;
     my $sysdir = $self->sysdir;
