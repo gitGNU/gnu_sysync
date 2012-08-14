@@ -1,0 +1,54 @@
+{
+   "abstract" : "Simplistic system management",
+   "author" : [
+      "Ohio-Pennsylvania Software, LLC."
+   ],
+   "dynamic_config" : 0,
+   "generated_by" : "Module::Install version 1.06, CPAN::Meta::Converter version 2.112150",
+   "license" : [
+      "open_source"
+   ],
+   "meta-spec" : {
+      "url" : "http://search.cpan.org/perldoc?CPAN::Meta::Spec",
+      "version" : "2"
+   },
+   "name" : "Sysync",
+   "no_index" : {
+      "directory" : [
+         "defaults",
+         "docs",
+         "inc"
+      ],
+      "file" : [
+         "post_install.PL"
+      ]
+   },
+   "prereqs" : {
+      "build" : {
+         "requires" : {
+            "ExtUtils::MakeMaker" : "6.59"
+         }
+      },
+      "configure" : {
+         "requires" : {
+            "ExtUtils::MakeMaker" : "6.59"
+         }
+      },
+      "runtime" : {
+         "requires" : {
+            "Digest::MD5" : 0,
+            "File::Copy" : 0,
+            "IPC::Open3" : 0,
+            "YAML" : 0,
+            "perl" : "5.008004"
+         }
+      }
+   },
+   "release_status" : "stable",
+   "resources" : {
+      "license" : [
+         "http://opensource.org/licenses/gpl-license.php"
+      ]
+   },
+   "version" : "0.1"
+}

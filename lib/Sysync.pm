@@ -2,6 +2,8 @@ package Sysync;
 use strict;
 use Digest::MD5 qw(md5_hex);
 
+our $VERSION = '0.1';
+
 =head1 NAME
 
 Sysync - Simplistic system management

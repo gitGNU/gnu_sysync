@@ -25,36 +25,47 @@ use Digest::MD5 qw(md5_hex);
 use YAML;
 
 my $sysdir = '/var/sysync';
-my $editor = $ENV{EDITOR} || 'vi';
 
-die "may only be ran as root\n" unless $< == 0;
+unless ($< == 0)
+{
+    warn "may only be ran as root\n";
+    exit(0);
+}
 
 sub main
 {
-    # grab options
-        #die "sysync is already installed\n" if -d $sysdir;
+    unless (-d $sysdir)
+    {
+        mkdir("$sysdir");
+        chmod 0700, "$sysdir";
+    }
 
-    mkdir("$sysdir");
-    chmod 0700, "$sysdir";
-    mkdir("$sysdir/users");
-    mkdir("$sysdir/groups");
-    mkdir("$sysdir/hosts");
-    mkdir("$sysdir/files");
-    mkdir("$sysdir/stage/");
-    mkdir("$sysdir/keys");
+    mkdir("$sysdir/users")  unless -d "$sysdir/users";
+    mkdir("$sysdir/groups") unless -d "$sysdir/groups";
+    mkdir("$sysdir/hosts")  unless -d "$sysdir/hosts";
+    mkdir("$sysdir/stage/") unless -d "$sysdir/stage";
+    mkdir("$sysdir/keys")   unless -d "$sysdir/keys";
     chmod 0700, "$sysdir/keys";
 
-    system(q[ssh-keygen -N "" -f /var/sysync/keys/sysync_rsa])
-        unless -e '/var/sysync/keys/sysync_rsa';
+    unless (-e '/var/sysync/keys/sysync_rsa')
+    {
+        print "Generating ssh keys for sysync...\n";
+        system(q[ssh-keygen -N "" -f /var/sysync/keys/sysync_rsa]);
+    }
 
+    print "Installing /usr/sbin/sysync\n";
     copy('./bin/sysync', '/usr/sbin/sysync');
-    chmod 700, '/usr/sbin/sysync';
+    chmod 0755, '/usr/sbin/sysync';
 
+    print "Installing /usr/sbin/sysyncd\n";
     copy('./bin/sysyncd', '/usr/sbin/sysyncd');
-    chmod 700, '/usr/sbin/sysyncd';
+    chmod 0755, '/usr/sbin/sysyncd';
 
+    print "Copying /etc/init.d/sysync\n";
     copy('./defaults/sysync', '/etc/init.d/sysync');
-    chmod 755, '/etc/init.d/sysync';
+    chmod 0755, '/etc/init.d/sysync';
+
+    print "Adding to init.d...\n";
 
     # add to rc.d
     symlink('../init.d/sysync', '/etc/rc0.d/K20sysync');
@@ -73,6 +84,10 @@ sub main
     
     copy('./defaults/default.conf', "$sysdir/hosts/default.conf")
         unless -e "$sysdir/hosts/default.conf";
+
+    print "Sysync successfully installed.\n";
+
+    return 0;
 }
 
 exit __PACKAGE__->main;
