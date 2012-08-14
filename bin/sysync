@@ -38,8 +38,6 @@ die "sysync may only be ran as root\n" unless $< == 0;
 my $current_workers = 0;
 
 my @TRAILING_ARGS;
-open(LOG, ">/dev/null");
-*LOG = *STDERR if $ENV{DEBUG};
 
 my $sysdir; 
 my $stagedir;
@@ -316,50 +314,6 @@ sub main
     }
 
     return 0;
-}
-
-sub _log { my $lt=localtime; print LOG "$lt: $_[0]\n" }
-
-sub _sync_host
-{
-    my ($host, $address) = @_;
-
-    my @rsync = ('rsync', '-zva', '--copy-unsafe-links',
-                 '-e', 'ssh -carcfour -i /var/sysync/keys/sysync_rsa');
-    push @rsync, "$stagedir/$host/";
-    push @rsync, "$address:/";
-
-    my $r = _system(@rsync);
-
-    if ($r->{status} and $r->{status} > 0)
-    {
-        _log("$host => $address fail:\n");
-        _log($r->{stderr});
-    }
-    else
-    {
-        my @lines = split("\n", $r->{stdout});
-
-        my @out_lines;
-        for (@lines)
-        {
-            $_ =~ s/[\n\r]//g;
-            next if $_ =~ /^sending /;
-            next if $_ =~ /^sent /;
-            next if $_ =~ /^total /;
-            next if $_ =~ /^Warning: Permanently added/;
-
-            push @out_lines, "$address: $_" if $_;
-        }
-
-        @out_lines = grep { $_ } @out_lines;
-
-        if (@out_lines)
-        {
-            my $files = join("\n", @out_lines);
-            _log("rsyncing [$host => $address]\n$files");
-        }
-    } 
 }
 
 sub _system
