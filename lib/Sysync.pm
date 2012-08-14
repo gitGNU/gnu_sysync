@@ -405,7 +405,7 @@ sub read_file_contents
     close($fh);
 
     return join('', @content);
-g}
+}
 
 1;
 
