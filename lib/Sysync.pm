@@ -2,11 +2,26 @@ package Sysync;
 use strict;
 use Digest::MD5 qw(md5_hex);
 
-=head2 METHODS
+=head1 NAME
+
+Sysync - Simplistic system management
+
+=head1 SYNOPSIS
+
+See: http://sysync.nongnu.org/tutorial.html
+
+=head1 METHODS
 
 =head3 new
 
 Creates a new Sysync object.
+
+ my $sysync = Sysync->new({
+    sysdir      => '/var/sysync',
+    stagedir    => '/var/sysync/stage', # if omitted, appends ./stage to sysdir
+    salt_prefix => '', # if omitted, defaults to '$6$'
+    log         => $file_handle_for_logging,
+ });
 
 =cut
 
@@ -26,6 +41,10 @@ sub new
 }
 
 =head3 log
+
+Log a message.
+
+ $self->log('the moon is broken');
 
 =cut
 
@@ -48,37 +67,61 @@ sub sysdir { shift->{sysdir} }
 
 =head3 stagedir
 
+Returns stage directory.
+
 =cut
 
 sub stagedir { $_[0]->{stagedir} || join('/', $_[0]->sysdir, 'stage' ) }
 
 =head3 get_user
 
-Returns hashref of user information.
+Returns hashref of user information. It's worth noting that passwords should not be returned here for normal users.
+
+ Example:
+
+ {
+   username => 'wafflewizard',
+   uid => 1001,
+   fullname => 'Waffle E. Wizzard',
+   homedir => '/home/wafflewizard',
+   shell => '/bin/bash',
+   disabled => 0,
+   ssh_keys => [
+      'ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEA10YAFEAByOlrMmd5Beh73SOg7okHpK5Bz9dOgmYb4idR3A6iz+ycyXtnCmwSGdmh6AQoeKfJx+9rxLtvdHUzhRa/YejqBGsTwYl5Q+1bKbCkJfgZhtB99Xt5j7grXzrJ0zp2vTfG2mPndnD7xuQQQnLsZrFSoTY8FPvQo3a9R1wPIuxBGs5jWm9+pvluJtAT3I7IaVfylNBCGU8+Fw/qvJtWEesyqyRmFJZ47XzFKJ5EzB6hLaW+MAaCH6fZDycdjiTfJOMThtpFF557rqz5EN76VRqHpnkiqKpatMX4h0hiL/Snl+fbUxOYm5qcHughuis4Sf6xXoABsyz2lsrqiQ== wafflewizard',
+   ],
+ }
 
 =cut
 
 sub get_user { die 'needs implemented' }
 
-=head3 get_user_password
+=head3 get_all_users
 
-=cut
-
-sub get_user_password { die 'needs implemented' }
-
-=head2 get_all_users
+Return array of all usernames.
 
 =cut
 
 sub get_all_users { die 'needs implemented' }
 
+=head3 get_user_password
+
+Return a user's encrypted password.
+
+=cut
+
+sub get_user_password { die 'needs implemented' }
+
 =head3 set_user_password
+
+Set a user's encrypted password.
 
 =cut
 
 sub set_user_password { die 'needs implemented' }
 
 =head3 get_users_from_group
+
+Returns array of users in a given group.
 
 =cut
 
@@ -100,15 +143,11 @@ Returns all hosts.
 
 sub get_all_hosts { die 'needs implemented' }
 
-
 =head3 must_refresh
 
-=cut
+Returns true if sysync must refresh.
 
-sub must_refresh { die 'needs implemented' }
-
-
-=head3 must_refresh
+Passing 1 or 0 as an argument sets whether this returns true.
 
 =cut
 
@@ -222,12 +261,6 @@ sub get_host_ent
     };
 }
 
-=head3 get_hosts
-
-=cut
-
-sub get_hosts { die 'needs implemented' }
-
 =head3 update_all_hosts
 
 Iterate through every host and build password files.
@@ -239,7 +272,7 @@ sub update_all_hosts
     my ($self, %params) = @_;
 
     # get list of hosts along with image name
-    my $hosts = $params{hosts} || $self->get_hosts;
+    my $hosts = $params{hosts} || $self->get_all_hosts;
 
     # first, build staging directories
     my @hosts = keys %{ $hosts->{hosts} || {} };
@@ -372,7 +405,7 @@ sub read_file_contents
     close($fh);
 
     return join('', @content);
-}
+g}
 
 1;
 

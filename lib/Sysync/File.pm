@@ -3,12 +3,21 @@ use strict;
 use YAML;
 use base 'Sysync';
 
-sub get_hosts
-{
-    my $self = shift;
-    my $sysdir = $self->sysdir;
-    return Load($self->read_file_contents("$sysdir/hosts.conf")) || {};
-}
+=head1 NAME
+
+Sysync::File - Use Sysync with flat-files on the backend.
+
+=head1 SYNOPSIS
+
+See: http://sysync.nongnu.org/tutorial.html
+
+=head1 METHODS
+
+=head3 get_user_password
+
+Return a user's encrypted password.
+
+=cut
 
 
 sub get_user_password
@@ -17,6 +26,12 @@ sub get_user_password
     my $sysdir = $self->sysdir;
     return $self->read_file_contents("$sysdir/users/$username.passwd");
 }
+
+=head3 set_user_password
+
+Set a user's password.
+
+=cut
 
 sub set_user_password
 {
@@ -147,6 +162,10 @@ sub get_host_users_groups
 
 =head3 get_user
 
+Returns hashref of user information.
+
+Unless "hard-coded", the user's password will not be returned in this hashref.
+
 =cut
 
 sub get_user
@@ -161,6 +180,8 @@ sub get_user
 }
 
 =head3 get_all_users
+
+Returns an array of all usernames.
 
 =cut
 
@@ -182,6 +203,10 @@ sub get_all_users
 }
 
 =head3 get_all_hosts
+
+Returns hashref:
+
+
 
 =cut
 
@@ -217,6 +242,7 @@ sub get_all_groups
 
 =head3 get_users_from_group
 
+Returns array of users in a given group
 
 =cut
 
@@ -234,6 +260,10 @@ sub get_users_from_group
 }
 
 =head3 must_refresh
+
+Returns true if sysync must refresh.
+
+Passing 1 or 0 as an argument sets whether this returns true.
 
 =cut
 
@@ -262,9 +292,7 @@ sub must_refresh
     }
 }
 
-
 1;
-
 
 =head1 COPYRIGHT
 
