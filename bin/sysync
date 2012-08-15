@@ -18,7 +18,6 @@ sysync - command-line interface for sysync
     --refresh (by default, sysync-daemon syncs everything every 30 minutes, this forces a refresh)
  Administrative Commands (using Sysync::File):
     --adduser=[user]
-    --adduser=[user]
     --edituser=[user]
     --deluser=[user]
     --addgroup=[group]
@@ -31,13 +30,9 @@ sysync - command-line interface for sysync
 
 =head1 TUTORIAL
 
-See: http://sysync.nongnu.org/tutorial.html
-
 =head2 Introduction to Sysync
 
 Sysync is a tool to manage users/groups and configuration files across multiple hosts.
-
-To install sysync, simply run the install.pl script.
 
 =head2 Add a user
 
@@ -186,7 +181,7 @@ In the above example, we're overriding the default password and ssh keys for the
 We're also only importing members of the sysadmin group.
 
 
-=head3 Mapping hosts to hosts
+=head2 Mapping hosts to hosts
 
 To edit the host mapping:
  
@@ -201,7 +196,7 @@ To edit the host mapping:
  
 Multple physical hosts can be mapped to one host configuration, as seen in the above example.
 
-=head3 Controlling files
+=head2 Controlling files
 
 Once sysync is running, with your hosts created, it will create a staging directory
 in /var/sysync/stage.  The staging directory contains the group, passwd, and shadow 
@@ -231,7 +226,7 @@ the files will be pushed out as files.  For example:
 
 By default, sysync pushes changes whenever a user/group/host is modified.  When 
 files are changed, sysync will push it out on the next refresh.  The sysync 
-daemon can be forced to refreshed by using the `sysync --refresh-now` command.
+daemon can be forced to refreshed by using the `sysync --refresh` command.
 
 =head2 SSH keys
 
@@ -811,7 +806,6 @@ sub usage
     if (ref $sysync eq 'Sysync::File')
     {
         warn "Administrative Commands (using Sysync::File):\n";
-        warn "   --adduser=[user]\n";
         warn "   --adduser=[user]\n";
         warn "   --edituser=[user]\n";
         warn "   --deluser=[user]\n";
