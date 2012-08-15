@@ -16,6 +16,12 @@ requires 'IPC::Open3';
 no_index directory => 'defaults';
 no_index file => 'post_install.PL';
 
+resources
+  homepage      => "http://sysync.nongnu.org",
+  bugtracker    => "https://savannah.nongnu.org/bugs/?group=sysync",
+  repository    => "git://git.savannah.nongnu.org/sysync.git",
+  license       => "http://www.gnu.org/licenses/agpl-3.0.html";
+
 makemaker_args(
     MAN1PODS => {
         'bin/sysync' => 'blib/man1/sysync.1',

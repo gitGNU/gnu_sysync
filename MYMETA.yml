@@ -16,7 +16,6 @@ name: Sysync
 no_index:
   directory:
     - defaults
-    - docs
     - inc
   file:
     - post_install.PL
@@ -27,5 +26,8 @@ requires:
   YAML: 0
   perl: 5.008004
 resources:
-  license: http://opensource.org/licenses/gpl-license.php
-version: 0.1
+  bugtracker: https://savannah.nongnu.org/bugs/?group=sysync
+  homepage: http://sysync.nongnu.org
+  license: http://www.gnu.org/licenses/agpl-3.0.html
+  repository: git://git.savannah.nongnu.org/sysync.git
+version: 0.20
