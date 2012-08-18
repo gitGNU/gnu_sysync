@@ -2,7 +2,7 @@ package Sysync;
 use strict;
 use Digest::MD5 qw(md5_hex);
 
-our $VERSION = '0.20';
+our $VERSION = '0.21';
 
 =head1 NAME
 
