@@ -292,7 +292,7 @@ sub update_all_hosts
             mkdir "$stagedir/$host";
             chmod 0755, "$stagedir/$host";
             chown 0, 0, "$stagedir/$host";
-            _log("Creating $stagedir/$host");
+            $self->log("Creating $stagedir/$host");
             $r++;
         }
 
@@ -301,7 +301,7 @@ sub update_all_hosts
             mkdir "$stagedir/$host/etc";
             chmod 0755, "$stagedir/$host/etc";
             chown 0, 0, "$stagedir/$host/etc";
-            _log("Creating $stagedir/$host/etc");
+            $self->log("Creating $stagedir/$host/etc");
             $r++;
         }
 
@@ -310,7 +310,7 @@ sub update_all_hosts
             mkdir "$stagedir/$host/etc/ssh";
             chmod 0755, "$stagedir/$host/etc/ssh";
             chown 0, 0, "$stagedir/$host/etc/ssh";
-            _log("Creating $stagedir/$host/etc/ssh");
+            $self->log("Creating $stagedir/$host/etc/ssh");
             $r++;
         }
 
@@ -319,7 +319,7 @@ sub update_all_hosts
             mkdir "$stagedir/$host/etc/ssh/authorized_keys";
             chmod 0755, "$stagedir/$host/etc/ssh/authorized_keys";
             chown 0, 0, "$stagedir/$host/etc/ssh/authorized_keys";
-            _log("Creating $stagedir/$host/etc/ssh/authorized_keys");
+            $self->log("Creating $stagedir/$host/etc/ssh/authorized_keys");
             $r++;
         }
 
