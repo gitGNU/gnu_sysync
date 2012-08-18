@@ -141,7 +141,7 @@ sub get_host_users_groups
     # add magical per-user groups
     for my $user (@users)
     {
-        unless ($host_groups{$user->{username}})
+        if (not $host_groups{$user->{username}} and not $user->{gid})
         {
             $host_groups{$user->{username}} = {
                 gid => $user->{uid},
