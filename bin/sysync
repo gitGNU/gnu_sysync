@@ -140,10 +140,11 @@ You'll notice the "user_groups" config, which by default is set to "all". This s
 specifies which groups of users should be allowed on the host.  'all' is a special group
 which imports all users.
 
-
 =head2 Add a host configuration
 
-$ sudo sysync --addhost=spam --interactive
+ You may be interested in generating your host configuration files initially with the --import-host command (see below).
+
+ $ sudo sysync --addhost=spam --interactive
 
 You'll see:
 
@@ -181,6 +182,11 @@ Example:
 In the above example, we're overriding the default password and ssh keys for the root user.  
 We're also only importing members of the sysadmin group.
 
+=head2 Import an existing host
+
+Sysync can also create host configurations from existing hosts with the --import-host command.
+
+ $ sudo sysync --import-host=foo.waffle.savannah.gnu.org > host_config.conf
 
 =head2 Mapping hosts to hosts
 
@@ -551,7 +557,7 @@ sub main
             usleep(2000);
         }
     }
-    elsif (my $host = $options->{'import-host'})
+    elsif (my $host = $options->{'import-host'} and ref $sysync eq 'Sysync::File')
     {
         die "Host must be specified\n" if $host eq '1';
 
