@@ -27,6 +27,7 @@ sysync - command-line interface for sysync
     --edithost=[host]
     --delhost=[host]
     --edithosts (edit hosts.conf file)
+    --import-host=[hostname] (returns YAML dump of data from remote host)
 
 =head1 TUTORIAL
 
@@ -524,7 +525,9 @@ sub main
                 {
                     $0 = "sysync-cmd [$host => $h] $s";
                     my $r = _system('ssh', '-carcfour', '-C', "root\@${h}", '-i', 
-                                    '/var/sysync/keys/sysync_rsa', @TRAILING_ARGS);
+                                    '/var/sysync/keys/sysync_rsa', 
+                                    '-o', 'StrictHostKeyChecking=no',
+                                    @TRAILING_ARGS);
 
                     print STDOUT "completed: [pid: $$][$host => $h] $s\n";
                     print STDOUT "===STDOUT===\n" if $r->{stdout};
@@ -548,9 +551,46 @@ sub main
             usleep(2000);
         }
     }
-    elsif ($options->{daemon})
+    elsif (my $host = $options->{'import-host'})
     {
-        daemon();
+        die "Host must be specified\n" if $host eq '1';
+
+        my $r;
+        
+        $r = _system('ssh', '-carcfour', '-C', "root\@${host}", '-i', 
+                     '/var/sysync/keys/sysync_rsa', 
+                     '-o', 'StrictHostKeyChecking=no',
+                     'hostname');
+
+
+        $r = _system('ssh', '-carcfour', '-C', "root\@${host}", '-i', 
+                     '/var/sysync/keys/sysync_rsa', 
+                     '-o', 'StrictHostKeyChecking=no',
+                     'cat /etc/passwd');
+
+        my $passwd = $r->{stdout};
+
+        $r = _system('ssh', '-carcfour', '-C', "root\@${host}", '-i', 
+                     '/var/sysync/keys/sysync_rsa', 
+                     '-o', 'StrictHostKeyChecking=no',
+                     'cat /etc/shadow');
+
+        my $shadow = $r->{stdout};
+
+        $r = _system('ssh', '-carcfour', '-C', "root\@${host}", '-i', 
+                     '/var/sysync/keys/sysync_rsa', 
+                     '-o', 'StrictHostKeyChecking=no',
+                     'cat /etc/group');
+
+        my $group = $r->{stdout};
+
+        my $ent_data = _process_ent_files(
+            passwd => $passwd,
+            shadow => $shadow,
+            group  => $group,
+        );
+
+        print _custom_yaml_end_dump($ent_data);
     }
     elsif ($options->{help})
     {
@@ -562,6 +602,139 @@ sub main
     }
 
     return 0;
+}
+
+sub _custom_yaml_end_dump
+{
+    my $config = shift;
+    my $out = "users:\n";
+
+    @{$config->{users}} = sort {
+        ($a->{password} && $a->{uid} != 0)
+            <=>
+        ($b->{password} && $b->{uid} != 0)
+    } @{$config->{users}};
+
+    for my $user (@{$config->{users}})
+    {
+        if ($user->{password})
+        {
+            if ($user->{uid} > 0)
+            {
+                $out .= "    # THIS USER SHOULD PROBABLY NOT BE HERE, ADD THEM AS A SYSYNC USER! \n";
+            }
+
+            $out .= "    - username: $user->{username}\n";
+            $out .= "      uid: $user->{uid}\n";
+            $out .= "      gid: $user->{gid}\n";
+            $out .= "      homedir: '$user->{homedir}'\n";
+            $out .= "      shell: '$user->{shell}'\n";
+            $out .= "      password: '$user->{password}'\n"
+                if $user->{password};
+        }
+        else
+        {
+            $out .= "    - { username: $user->{username}, uid: $user->{uid}, gid: $user->{gid}, homedir: '$user->{homedir}', shell: '$user->{shell}' }\n";
+        }
+    }
+
+    $out .= "groups:\n";
+    for my $group (@{$config->{groups}})
+    {
+        if ($group->{users})
+        {
+            $out .= "    - groupname: $group->{groupname}\n";
+            $out .= "      gid: $group->{gid}\n";
+            $out .= "      users:\n";
+            
+            for my $user (@{$group->{users}})
+            {
+                $out .= "        - $user\n";
+            }
+        }
+        else
+        {
+            $out .= "    - { groupname: $group->{groupname}, gid: $group->{gid} }\n";
+        }
+    }
+
+
+    return $out;
+}
+
+sub _process_ent_files
+{
+    my %params = @_;
+
+    my %ent_data = (
+        groups => [],
+        users  => [],
+    );
+
+    my %groups;
+
+    my $line = 0;
+    for my $group_line (split("\n", $params{group}))
+    {
+        $line++;
+
+        my ($name, undef, $gid, $user_line) = split(':', $group_line);
+        my @users = split(',', $user_line);
+
+        die "malformed group file at line $line\n"
+            unless $name and defined $gid;
+
+        my %g = (
+            groupname => $name,
+            gid       => $gid,
+        );
+        $g{users} = \@users if @users;
+
+        push @{$ent_data{groups}}, \%g;
+    }
+
+    $line = 0;
+    my %shadow_map;
+    for my $shadow_line (split("\n", $params{shadow}))
+    {
+        $line++;
+
+        my ($name, $passwd) = split(':', $shadow_line);
+
+        die "malformed shadow file at line $line\n"
+            unless $name;
+
+        $shadow_map{$name} = $passwd
+            if $passwd and $passwd ne '*' and $passwd ne '!';
+    }
+
+
+    $line = 0;
+    for my $passwd_line (split("\n", $params{passwd}))
+    {
+        $line++;
+
+        my ($name, undef, $uid, $gid, $user_info, $homedir, $shell) = split(':', $passwd_line);
+        my ($fullname) = split(',', $user_info);
+
+        die "malformed user file at line $line\n"
+            unless $name and defined $gid;
+
+        my %u = (
+            username  => $name,
+            uid       => $uid,
+            gid       => $gid,
+            shell     => $shell,
+            homedir   => $homedir,
+        );
+        $u{password} = $shadow_map{$name}
+            if $shadow_map{$name};
+
+        push @{$ent_data{users}}, \%u;
+    }
+
+    return \%ent_data;
+
 }
 
 sub _system
@@ -702,6 +875,7 @@ sub _parse_options
         usersetpasswordauthkeys
         cmd
         refresh
+        import-host
     );
 
     my @OPTS = @ARGV;
@@ -816,6 +990,7 @@ sub usage
         warn "   --edithost=[host]\n";
         warn "   --delhost=[host]\n";
         warn "   --edithosts (edit hosts.conf file)\n";
+        warn "   --import-host=[hostname] (returns YAML dump of data from remote host)\n";
     }
 
 }

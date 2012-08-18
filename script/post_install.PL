@@ -68,13 +68,13 @@ sub main
     print "Adding to init.d...\n";
 
     # add to rc.d
-    symlink('../init.d/sysync', '/etc/rc0.d/K20sysync');
-    symlink('../init.d/sysync', '/etc/rc1.d/K20sysync');
-    symlink('../init.d/sysync', '/etc/rc2.d/S20sysync');
-    symlink('../init.d/sysync', '/etc/rc3.d/S20sysync');
-    symlink('../init.d/sysync', '/etc/rc4.d/S20sysync');
-    symlink('../init.d/sysync', '/etc/rc5.d/S20sysync');
-    symlink('../init.d/sysync', '/etc/rc6.d/K20sysync');
+    # symlink('../init.d/sysync', '/etc/rc0.d/K20sysync');
+    # symlink('../init.d/sysync', '/etc/rc1.d/K20sysync');
+    # symlink('../init.d/sysync', '/etc/rc2.d/S20sysync');
+    # symlink('../init.d/sysync', '/etc/rc3.d/S20sysync');
+    # symlink('../init.d/sysync', '/etc/rc4.d/S20sysync');
+    # symlink('../init.d/sysync', '/etc/rc5.d/S20sysync');
+    # symlink('../init.d/sysync', '/etc/rc6.d/K20sysync');
 
     copy('./defaults/hosts.conf', "$sysdir/hosts.conf")
         unless -e "$sysdir/hosts.conf";
