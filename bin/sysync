@@ -338,7 +338,7 @@ sub main
         die "Username must be specified\n" if $username eq '1';
         die "User $username does not exists\n" unless -e "$sysdir/users/$username.conf";
         slock();
-        edit_yaml_file("$sysdir/users/$username.conf");
+        &_edit_yaml_keyed_file("$sysdir/users/$username.conf", 'users', 'username');
         sunlock();
         $sysync->must_refresh(1);
     }
@@ -372,7 +372,7 @@ sub main
         die "Group must be specified\n" if $group eq '1';
         die "Group $group does not exists\n" unless -e "$sysdir/groups/$group.conf";
         slock();
-        edit_yaml_file("$sysdir/groups/$group.conf");
+        &_edit_yaml_keyed_file("$sysdir/groups/$group.conf", 'groups', 'groupname');
         sunlock();
         $sysync->must_refresh(1);
     }
@@ -1031,6 +1031,46 @@ sub edit_yaml_file
 
     move("/tmp/$tmp_file", $file);
 }
+
+sub _edit_yaml_keyed_file
+{
+    my ($file, $path, $key) = @_;
+    my $tmp_file = md5_hex(rand() . $$ . rand());
+    copy($file, "/tmp/$tmp_file");
+    system($editor, "/tmp/$tmp_file");
+
+    my $old_config   = Load($sysync->read_file_contents($file));
+
+    my $new_config;
+    do {
+        eval { $new_config = Load($sysync->read_file_contents("/tmp/$tmp_file")) };
+        if ($@)
+        {
+            print "Unable to parse file contents, please re-edit: $@\n";
+            print "Want to edit? [Y/n] ";
+            chomp(my $r = <STDIN>);
+
+            if ($r =~ /y/i)
+            {
+                system($editor, "/tmp/$tmp_file");
+            }
+            else
+            {
+                unlink("/tmp/$tmp_file");
+                sunlock();
+                die "Aborted\n";
+            }
+        }
+    } while $@;
+
+    move("/tmp/$tmp_file", $file);
+
+    if ($old_config->{$key} ne $new_config->{$key})
+    {
+        move($file, "$sysdir/$path/$new_config->{$key}.conf");
+    }
+}
+
 
 exit __PACKAGE__->main;
 
