@@ -53,8 +53,7 @@ Generate a list of files with their content.
     mode     => 600,
     gid      => 0,
     uid      => 0,
-    data     => ''
-    content => 'there are the contents',
+    data     => 'data is here'
  }
 
 =cut
@@ -97,12 +96,15 @@ sub get_host_files
 # }
 # 
 
-
 sub _process_file_block
 {
     my ($self, $block, $host, $stack) = @_;
     my $sysdir = $self->sysdir;
     $stack = [] unless defined $stack;
+
+    my $users  = $self->get_host_users($host);
+    my $groups = $self->get_host_groups($host);
+
 
     my %block;
 
@@ -127,8 +129,8 @@ sub _process_file_block
                 }
             }
 
-            my $owner = $self->get_host_user($host, $item->{owner});
-            my $group = $self->get_host_group($host, $item->{group});
+            my $owner = $users->{$item->{owner}};
+            my $group = $groups->{$item->{group}};
 
             if (not $owner)
             {
@@ -149,8 +151,8 @@ sub _process_file_block
         }
         elsif (my $directory = $item->{directory})
         {
-            my $owner = $self->get_host_user($host, $item->{owner});
-            my $group = $self->get_host_group($host, $item->{group});
+            my $owner = $users->{$item->{owner}};
+            my $group = $groups->{$item->{group}};
 
             if (not $owner)
             {
@@ -386,10 +388,6 @@ sub get_all_users
 }
 
 =head3 get_all_hosts
-
-Returns hashref:
-
-
 
 =cut
 

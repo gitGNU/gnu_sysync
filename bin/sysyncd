@@ -12,7 +12,6 @@ sysyncd - daemon for sysync
 
 =cut
  
-
 use strict;
 
 use File::Copy;
@@ -41,6 +40,8 @@ my @TRAILING_ARGS;
 open(LOG, ">/dev/null");
 *LOG = *STDERR if $ENV{DEBUG};
 
+my $no_passwd_control = 0;
+
 sub main
 {
     # grab options
@@ -48,6 +49,9 @@ sub main
     
     my $config  =
         Load(Sysync->read_file_contents($options->{config} || '/var/sysync/sysync.conf'));
+
+    $no_passwd_control = 1
+        if $config->{no_passwd_control};
 
     $default_sleep = $config->{sleep}
         if $config->{sleep} and $config->{sleep} > 0;
@@ -90,7 +94,7 @@ sub _sync_host
 {
     my ($host, $address, $dir, $what) = @_;
 
-    my @rsync = ('rsync', '-zva', '--copy-unsafe-links',
+    my @rsync = ('rsync', '-zva', '--copy-unsafe-links', '--omit-dir-times',
                  '-e', 'ssh -carcfour -i /var/sysync/keys/sysync_rsa -o StrictHostKeyChecking=no');
     push @rsync, "$dir/$host/";
     push @rsync, "$address:/";
@@ -203,7 +207,7 @@ sub daemon
     {
         sleep(1);
 
-        if ($sysync->must_refresh)
+        if ($sysync->must_refresh and not $no_passwd_control)
         {
             $sysync->must_refresh(0);
             my $hosts = $sysync->get_all_hosts;
@@ -217,17 +221,103 @@ sub daemon
         {
             $sysync->must_refresh_files(0);
             my $hosts = $sysync->get_all_hosts;
-            eval { $sysync->update_all_hosts_files($hosts) };
-            if (my $error = $@)
+
+            # these updates can be massive, so fork!
+            unless (fork())
             {
-                $error =~ s/\n//g;
-                $sysync->log($error);
+                &sync_hosts_files($hosts, $stagefilesdir, 'files');
+
+                exit(0);
+            }
+        }
+    }
+}
+
+my %pids;
+sub sync_hosts_files
+{
+    my ($hosts, $dir, $what) = @_;
+
+    my @hosts = keys %{ $hosts->{hosts} || {} };
+
+    # map hosts to addresses
+    my @host_addresses;
+
+    for my $host (@hosts)
+    {
+        while ($current_workers >= $max_workers) { usleep(2000) };
+
+        if (my $pid = fork())
+        {
+            $pids{$pid} = 1;
+            $current_workers++;
+        }
+        else
+        {
+            $0 = "sysyncd files refresh $host [building]";
+
+            eval { $sysync->update_host_files($host) };
+
+            if ($@)
+            {
+                _log($@);
+            }
+            exit(0);
+        }
+    }
+
+    # wait for children to finish
+    while (keys %pids)
+    {
+        for my $pid (keys %pids)
+        {
+            delete $pids{$pid}
+                if waitpid($pid, WNOHANG);
+        }
+        usleep(2000);
+    }
+
+    for my $host (@hosts)
+    {        
+        for my $address (@{ $hosts->{hosts}{$host} || [] })
+        {
+            push @host_addresses, { 
+                host    => $host,
+                address => $address,
+            };
+        }
+
+        for my $h (@host_addresses)
+        {
+            while ($current_workers >= $max_workers) { usleep(2000) };
+
+            if (my $pid = fork())
+            {
+                $current_workers++;
+                $pids{$pid} = 1;
             }
             else
             {
-                &sync_hosts($hosts, $stagefilesdir, 'files');
+                $0 = "sysyncd files refresh [$h->{host} => $h->{address}]";
+                eval { _sync_host($h->{host}, $h->{address}, $dir, 'files') };
+                if ($@)
+                {
+                    _log($@);
+                }
+                exit(0);
             }
-        }        
+        }
+    }
+
+    # wait for children to finish
+    while (keys %pids)
+    {
+        for my $pid (keys %pids)
+        {
+            delete $pids{$pid}
+                if waitpid($pid, WNOHANG);
+        }
+        usleep(2000);
     }
 }
 

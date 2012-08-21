@@ -10,6 +10,8 @@ license 'gpl';
 
 requires 'Digest::MD5';
 requires 'File::Copy';
+requires 'File::Find';
+requires 'File::Path';
 requires 'YAML';
 requires 'IPC::Open3';
 
