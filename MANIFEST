@@ -21,3 +21,7 @@ MANIFEST			This list of files
 META.yml
 README
 script/post_install.PL
+t/data/groups/waffle.conf
+t/data/hosts/spoon.conf
+t/data/users/foo.conf
+t/sysynclib.t

@@ -16,7 +16,8 @@
    "no_index" : {
       "directory" : [
          "defaults",
-         "inc"
+         "inc",
+         "t"
       ],
       "file" : [
          "post_install.PL"

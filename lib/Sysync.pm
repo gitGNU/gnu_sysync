@@ -4,7 +4,7 @@ use Digest::MD5 qw(md5_hex);
 use File::Find;
 use File::Path;
 
-our $VERSION = '0.24';
+our $VERSION = '0.25';
 
 =head1 NAME
 
@@ -426,7 +426,7 @@ sub update_host_files
         $r++;
     }
 
-    for my $path (keys %{ $files || {} })
+    for my $path (sort keys %{ $files || {} })
     {
         my $item = $files->{$path};
         next unless $item->{directory};
@@ -438,14 +438,28 @@ sub update_host_files
         next if $item->{directory} eq '/etc/ssh/authorized_keys';
 
         $item->{directory} =~ s/^\///;
-            
-        mkdir "$stagefilesdir/$host/$item->{directory}"
-            unless -d "$stagefilesdir/$host/$item->{directory}";
+
+        my @path_parts = split('/', $item->{directory});
+        my $filename   = pop @path_parts;
+        my $parent_dir = join('/', @path_parts);
+
+        $item->{file} =~ s/^\///;
+
+        unless (-d "$stagefilesdir/$host/$parent_dir")
+        {
+            die "[$host: error] parent directory $parent_dir not defined for $item->{directory}\n";
+        }
+
+        unless (-d "$stagefilesdir/$host/$item->{directory}")
+        {
+            mkdir "$stagefilesdir/$host/$item->{directory}";
+            $self->log("creating: $stagefilesdir/$host/$item->{directory}");
+        }
 
         my $mode = sprintf("%04i", $item->{mode});
         chmod $mode, "$stagefilesdir/$host/$item->{directory}";
         chown $item->{uid}, $item->{gid}, "$stagefilesdir/$host/$item->{directory}";
-        $self->log("creating: $stagefilesdir/$host/$item->{directory}");
+
         $r++;
     }
 
@@ -656,6 +670,8 @@ sub read_file_contents
 
     die "error: $file does not exist\n"
         if $params{must_exist} and not -f $file;
+
+    return unless -e $file;
 
     open(my $fh, $file);
     my @content = <$fh>;

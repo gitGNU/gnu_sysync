@@ -17,6 +17,7 @@ no_index:
   directory:
     - defaults
     - inc
+    - t
   file:
     - post_install.PL
 requires:
