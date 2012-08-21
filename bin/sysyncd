@@ -88,7 +88,7 @@ sub _log { $sysync->log($_[0]) }
 
 sub _sync_host
 {
-    my ($host, $address, $dir) = @_;
+    my ($host, $address, $dir, $what) = @_;
 
     my @rsync = ('rsync', '-zva', '--copy-unsafe-links',
                  '-e', 'ssh -carcfour -i /var/sysync/keys/sysync_rsa -o StrictHostKeyChecking=no');
@@ -123,7 +123,7 @@ sub _sync_host
         if (@out_lines)
         {
             my $files = join("\n", @out_lines);
-            _log("rsyncing [$host => $address]\n$files");
+            _log("rsyncing $what [$host => $address]\n$files");
         }
     }
 }
@@ -262,7 +262,7 @@ sub sync_hosts
         else
         {
             $0 = "sysyncd $what refresh [$h->{host} => $h->{address}]";
-            eval { _sync_host($h->{host}, $h->{address}, $dir) };
+            eval { _sync_host($h->{host}, $h->{address}, $dir, $what) };
             if ($@)
             {
                 _log($@);

@@ -239,38 +239,6 @@ If you import a config, ensure the config is in the following format (the same a
 
 To push changes to files, issue a --push-files command.
 
-=head2 Controlling files in stage/ directory
-
-Once sysync is running, with your hosts created, it will create a staging directory
-in /var/sysync/stage.  The staging directory contains the group, passwd, and shadow 
-files for the specific host configuration.  In our above example, the files written
-to the 'spam' host configuration are located in /var/sysync/stage/spam.
- 
-Any file that's created in the stage directory will be pushed out to the relevant
-hosts.
- 
-Symlinks are also intelligent, and are imported as symlinks if contained within a 
-specific host's staging directory.  For example, if you:
- 
- # touch /var/sysync/stage/spam/etc/awesome.conf
- # cd /var/sysync/stage/spam/etc/
- # ln -s awesome.conf superawesome.conf
- 
-The superawesome.conf file will be a symlink on the hosts.
- 
-However, if you create a shared directory across multiple hosts and symlink to it,
-the files will be pushed out as files.  For example:
- 
- # mkdir -p /var/sysync/stage/shared/etc/
- # echo what > /var/sysync/stage/shared/etc/foo
- # ln -s /var/sysync/stage/shared/etc/foo /var/sysync/stage/spam/etc/foo
- 
- /var/sysync/stage/spam/etc/foo will be pushed out as a file.
-
-By default, sysync pushes changes whenever a user/group/host is modified.  When 
-files are changed, sysync will push it out on the next refresh.  The sysync 
-daemon can be forced to refreshed by using the `sysync --refresh` command.
-
 =head2 SSH keys
 
 Sysync pushes ssh keys under /etc/ssh/authorized_keys/${USERNAME}, if you

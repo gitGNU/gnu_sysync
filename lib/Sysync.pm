@@ -347,7 +347,8 @@ sub update_all_hosts_files
     # first, build staging directories
     my @hosts = keys %{ $hosts->{hosts} || {} };
 
-    my $stagedir = $self->stagefilesdir;
+    my $stagefilesdir = $self->stagefilesdir;
+    my $stagedir      = $self->stagedir;
 
     my $r = 0;
 
@@ -356,39 +357,42 @@ sub update_all_hosts_files
         next unless $self->is_valid_host($host);
         my $files = $self->get_host_files($host);
 
-        unless (-d "$stagedir/$host")
+        unless (-d "$stagefilesdir/$host")
         {
-            mkdir "$stagedir/$host";
-            chmod 0755, "$stagedir/$host";
-            chown 0, 0, "$stagedir/$host";
-            $self->log("creating: $stagedir/$host");
+            mkdir "$stagefilesdir/$host";
+            chmod 0755, "$stagefilesdir/$host";
+            chown 0, 0, "$stagefilesdir/$host";
+
+            $self->log("creating: $stagefilesdir/$host");
             $r++;
         }
 
-        unless (-d "$stagedir/$host/etc")
+        unless (-d "$stagefilesdir/$host/etc")
         {
-            mkdir "$stagedir/$host/etc";
-            chmod 0755, "$stagedir/$host/etc";
-            chown 0, 0, "$stagedir/$host/etc";
-            $self->log("creating: $stagedir/$host/etc");
+            mkdir "$stagefilesdir/$host/etc";
+            chmod 0755, "$stagefilesdir/$host/etc";
+            chown 0, 0, "$stagefilesdir/$host/etc";
+
+            $self->log("creating: $stagefilesdir/$host/etc");
             $r++;
         }
 
-        unless (-d "$stagedir/$host/etc/ssh")
+        unless (-d "$stagefilesdir/$host/etc/ssh")
         {
-            mkdir "$stagedir/$host/etc/ssh";
-            chmod 0755, "$stagedir/$host/etc/ssh";
-            chown 0, 0, "$stagedir/$host/etc/ssh";
-            $self->log("creating: $stagedir/$host/etc/ssh");
+            mkdir "$stagefilesdir/$host/etc/ssh";
+            chmod 0755, "$stagefilesdir/$host/etc/ssh";
+            chown 0, 0, "$stagefilesdir/$host/etc/ssh";
+            $self->log("creating: $stagefilesdir/$host/etc/ssh");
             $r++;
         }
 
-        unless (-d "$stagedir/$host/etc/ssh/authorized_keys")
+        unless (-d "$stagefilesdir/$host/etc/ssh/authorized_keys")
         {
-            mkdir "$stagedir/$host/etc/ssh/authorized_keys";
-            chmod 0755, "$stagedir/$host/etc/ssh/authorized_keys";
-            chown 0, 0, "$stagedir/$host/etc/ssh/authorized_keys";
-            $self->log("creating: $stagedir/$host/etc/ssh/authorized_keys");
+            mkdir "$stagefilesdir/$host/etc/ssh/authorized_keys";
+            chmod 0755, "$stagefilesdir/$host/etc/ssh/authorized_keys";
+            chown 0, 0, "$stagefilesdir/$host/etc/ssh/authorized_keys";
+
+            $self->log("creating: $stagefilesdir/$host/etc/ssh/authorized_keys");
             $r++;
         }
 
@@ -405,13 +409,13 @@ sub update_all_hosts_files
 
             $item->{directory} =~ s/^\///;
             
-            mkdir "$stagedir/$host/$item->{directory}"
-                unless -d "$stagedir/$host/$item->{directory}";
+            mkdir "$stagefilesdir/$host/$item->{directory}"
+                unless -d "$stagefilesdir/$host/$item->{directory}";
 
             my $mode = sprintf("%04i", $item->{mode});
-            chmod $mode, "$stagedir/$host/$item->{directory}";
-            chown $item->{uid}, $item->{gid}, "$stagedir/$host/$item->{directory}";
-            $self->log("creating: $stagedir/$host/$item->{directory}");
+            chmod $mode, "$stagefilesdir/$host/$item->{directory}";
+            chown $item->{uid}, $item->{gid}, "$stagefilesdir/$host/$item->{directory}";
+            $self->log("creating: $stagefilesdir/$host/$item->{directory}");
             $r++;
         }
 
@@ -427,24 +431,42 @@ sub update_all_hosts_files
 
             $item->{file} =~ s/^\///;
 
-            unless (-d "$stagedir/$host/$parent_dir")
+            unless (-d "$stagefilesdir/$host/$parent_dir")
             {
                 die "[$host: error] directory $parent_dir not defined for $item->{file}\n";
             }
 
-            if ($self->write_file_contents("$stagedir/$host/$item->{file}", $item->{data}))
+            if ($self->write_file_contents("$stagefilesdir/$host/$item->{file}", $item->{data}))
             {
                 $r++;
             }
 
             my $mode = sprintf("%04i", $item->{mode});
 
-            chmod oct($mode), "$stagedir/$host/$item->{file}";
-            chown $item->{uid}, $item->{gid}, "$stagedir/$host/$item->{file}";
+            chmod oct($mode), "$stagefilesdir/$host/$item->{file}";
+            chown $item->{uid}, $item->{gid}, "$stagefilesdir/$host/$item->{file}";
         }
+
+        # don't change times here from being touched
+        &_sync_times("$stagedir/$host", "$stagefilesdir/$host");
+        &_sync_times("$stagedir/$host/etc", "$stagefilesdir/$host/etc");
+        &_sync_times("$stagedir/$host/etc/ssh", "$stagefilesdir/$host/etc/ssh");
+        &_sync_times("$stagedir/$host/etc/ssh/authorized_keys", "$stagefilesdir/$host/etc/ssh/authorized_keys");
 
         return $r;
     }
+}
+
+sub _sync_times
+{
+    my ($path1, $path2) = @_;
+    die "$path1 does not exist\n" unless -e $path1;
+    die "$path2 does not exist\n" unless -e $path2;
+    my @p1 = stat($path1);
+    my $atime = $p1[8];
+    my $mtime = $p1[9];
+
+    utime($atime, $mtime, $path2) || warn "could not touch $path2 $!\n";
 }
 
 =head3 update_all_hosts
