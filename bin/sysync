@@ -15,7 +15,9 @@ sysync - command-line interface for sysync
     --usersetpasswordauthkeys returns authorized_keys file for all users to set their password
     --cmd=[host,host2] [command]
     --config=/path/to/config
-    --refresh (by default, sysync-daemon syncs everything every 30 minutes, this forces a refresh)
+    --refresh (alias for --push-auth)
+    --push-auth (push auth files to every host)
+    --push-files (push controlled files, not auth files, to every host)
  Administrative Commands (using Sysync::File):
     --adduser=[user]
     --edituser=[user]
@@ -203,7 +205,41 @@ To edit the host mapping:
  
 Multple physical hosts can be mapped to one host configuration, as seen in the above example.
 
-=head2 Controlling files
+=head2 Controlling files via config
+
+A host configuration file may have a files component, specified as such:
+
+ files:
+    - file:  /etc/foo.txt
+      owner: root
+      group: root
+      mode:  600
+      data: |
+         Here is the data.
+         It is so awesome.
+    - file:   /etc/bar.txt
+      owner:  root
+      group:  root
+      mode:   600
+      # uses sysdir, by default /var/sysync/ as base directory if leading slash is omitted.
+      source: files/moo.txt
+    - { import: host, host: waffle }
+    - { import: config, config: files/waffle.conf }
+
+If you import a config, ensure the config is in the following format (the same as if it were in a host file):
+
+ files:
+    - file:  /etc/foo.txt
+      owner: root
+      group: root
+      mode:  600
+      data: |
+         Here is the data.
+         It is so awesome.
+
+To push changes to files, issue a --push-files command.
+
+=head2 Controlling files in stage/ directory
 
 Once sysync is running, with your hosts created, it will create a staging directory
 in /var/sysync/stage.  The staging directory contains the group, passwd, and shadow 
@@ -425,11 +461,17 @@ sub main
         sunlock();
         $sysync->must_refresh(1);
     }
-    elsif ($options->{'refresh'})
+    elsif ($options->{'refresh'} or $options->{'push-auth'})
     {
         $sysync->must_refresh(1);
-        print "Refresh requested.\n";
+        print "Refresh auth data requested.\n";
     }
+    elsif ($options->{'push-files'})
+    {
+        $sysync->must_refresh_files(1);
+        print "Refresh files requested.\n";
+    }
+
     elsif ($options->{mkpasswd})
     {
         print _prompt_for_password() . "\n";
@@ -597,6 +639,10 @@ sub main
         );
 
         print _custom_yaml_end_dump($ent_data);
+    }
+    elsif ($options->{'push-files'})
+    {
+        usage();
     }
     elsif ($options->{help})
     {
@@ -881,6 +927,8 @@ sub _parse_options
         usersetpasswordauthkeys
         cmd
         refresh
+        push-files
+        push-auth
         import-host
     );
 
@@ -981,7 +1029,9 @@ sub usage
     warn "   --usersetpasswordauthkeys returns authorized_keys file for all users to set their password\n";
     warn "   --cmd=[host,host2] [command]\n";
     warn "   --config=/path/to/config\n";
-    warn "   --refresh (by default, sysync-daemon syncs everything every 30 minutes, this forces a refresh)\n";
+    warn "   --refresh (alias for --push-auth)\n";
+    warn "   --push-auth (push auth files to every host)\n";
+    warn "   --push-files (push controlled files, not auth files, to every host)\n";
 
     if (ref $sysync eq 'Sysync::File')
     {

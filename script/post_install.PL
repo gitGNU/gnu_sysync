@@ -44,6 +44,8 @@ sub main
     mkdir("$sysdir/groups") unless -d "$sysdir/groups";
     mkdir("$sysdir/hosts")  unless -d "$sysdir/hosts";
     mkdir("$sysdir/stage/") unless -d "$sysdir/stage";
+    mkdir("$sysdir/stage-files/") unless -d "$sysdir/stage-files";
+    mkdir("$sysdir/files/") unless -d "$sysdir/files";
     mkdir("$sysdir/keys")   unless -d "$sysdir/keys";
     chmod 0700, "$sysdir/keys";
 

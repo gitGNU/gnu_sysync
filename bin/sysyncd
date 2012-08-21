@@ -28,6 +28,7 @@ my $default_sleep = 1800;
 my $max_workers   = 10;
 my $sysdir;
 my $stagedir;
+my $stagefilesdir;
 my $sysync;
 
 my $editor = $ENV{EDITOR} || 'vi';
@@ -67,8 +68,9 @@ sub main
 
     $sysync = $backend_module->new($config);
 
-    $sysdir   = $sysync->sysdir;
-    $stagedir = $sysync->stagedir;
+    $sysdir        = $sysync->sysdir;
+    $stagedir      = $sysync->stagedir;
+    $stagefilesdir = $sysync->stagefilesdir;
 
     if ($options->{help})
     {
@@ -86,11 +88,11 @@ sub _log { $sysync->log($_[0]) }
 
 sub _sync_host
 {
-    my ($host, $address) = @_;
+    my ($host, $address, $dir) = @_;
 
     my @rsync = ('rsync', '-zva', '--copy-unsafe-links',
                  '-e', 'ssh -carcfour -i /var/sysync/keys/sysync_rsa -o StrictHostKeyChecking=no');
-    push @rsync, "$stagedir/$host/";
+    push @rsync, "$dir/$host/";
     push @rsync, "$address:/";
 
     my $r = _system(@rsync);
@@ -194,61 +196,78 @@ sub daemon
 
     $0 = 'sysyncd';
 
-    $sysync->must_refresh(0);
+    $sysync->must_refresh(1);
+    $sysync->must_refresh_files(1);
 
     while (1)
     {
-        my $hosts = $sysync->get_all_hosts;
-        my @hosts = keys %{ $hosts->{hosts} || {} };
+        sleep(1);
 
-        $sysync->update_all_hosts($hosts);
-
-        # map hosts to addresses
-        my @host_addresses;
-
-        for my $host (@hosts)
+        if ($sysync->must_refresh)
         {
-            for my $address (@{ $hosts->{hosts}{$host} || [] })
-            {
-                push @host_addresses, { 
-                    host    => $host,
-                    address => $address,
-                };
-            }
+            $sysync->must_refresh(0);
+            my $hosts = $sysync->get_all_hosts;
+
+            $sysync->update_all_hosts($hosts);
+
+            &sync_hosts($hosts, $stagedir, 'auth');
         }
 
-        for my $h (@host_addresses)
+        if ($sysync->must_refresh_files)
         {
-            while ($current_workers >= $max_workers) { usleep(2000) };
-
-            if (fork())
+            $sysync->must_refresh_files(0);
+            my $hosts = $sysync->get_all_hosts;
+            eval { $sysync->update_all_hosts_files($hosts) };
+            if (my $error = $@)
             {
-                $current_workers++;
+                $error =~ s/\n//g;
+                $sysync->log($error);
             }
             else
             {
-                $0 = "sysyncd refresh [$h->{host} => $h->{address}]";
-                eval { _sync_host($h->{host}, $h->{address}) };
-                if ($@)
-                {
-                    _log($@);
-                }
-                exit(0);
+                &sync_hosts($hosts, $stagefilesdir, 'files');
             }
-        }
+        }        
+    }
+}
 
-        my $sleep_counter = 1;
+sub sync_hosts
+{
+    my ($hosts, $dir, $what) = @_;
 
-        while ($sleep_counter <= $default_sleep)
+    my @hosts = keys %{ $hosts->{hosts} || {} };
+
+    # map hosts to addresses
+    my @host_addresses;
+
+    for my $host (@hosts)
+    {
+        for my $address (@{ $hosts->{hosts}{$host} || [] })
         {
-            sleep(1);
-            $sleep_counter++;
+            push @host_addresses, { 
+                host    => $host,
+                address => $address,
+            };
+        }
+    }
 
-            if ($sysync->must_refresh)
+    for my $h (@host_addresses)
+    {
+        while ($current_workers >= $max_workers) { usleep(2000) };
+
+        if (fork())
+        {
+            $current_workers++;
+        }
+        else
+        {
+            $0 = "sysyncd $what refresh [$h->{host} => $h->{address}]";
+            eval { _sync_host($h->{host}, $h->{address}, $dir) };
+            if ($@)
             {
-                $sysync->must_refresh(0);
-                last;
+                _log($@);
             }
+            exit(0);
         }
     }
 }

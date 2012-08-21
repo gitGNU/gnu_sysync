@@ -44,6 +44,189 @@ sub set_user_password
     return 1;
 }
 
+=head3 get_host_files
+
+Generate a list of files with their content.
+
+ Returns hashref:
+ '/etc/filename.conf' => {
+    mode     => 600,
+    gid      => 0,
+    uid      => 0,
+    data     => ''
+    content => 'there are the contents',
+ }
+
+=cut
+
+sub get_host_files
+{
+    my ($self, $host) = @_;
+    return unless $self->is_valid_host($host);
+
+    my %files;
+    my $sysdir = $self->sysdir;
+    my $default_host_config = {};
+    if (-e "$sysdir/hosts/default.conf")
+    {
+        $default_host_config = Load($self->read_file_contents("$sysdir/hosts/default.conf"));
+    }
+
+    my $default_files = $self->_process_file_block(($default_host_config->{files} || []), $host);
+
+    my $host_config = {};
+    if ($self->is_valid_host($host))
+    {
+        $host_config = Load($self->read_file_contents("$sysdir/hosts/$host.conf"));
+    }
+
+    my $host_files = $self->_process_file_block(($host_config->{files} || []), $host);
+
+    my $files = { %$default_files, %$host_files };
+
+    return $files;
+}
+
+# returns hashref
+#
+# '/etc/filename.conf' => {
+#    mode     => 600,
+#    owner    => root,
+#    group    => root,
+#    data     => '',
+# }
+# 
+
+
+sub _process_file_block
+{
+    my ($self, $block, $host, $stack) = @_;
+    my $sysdir = $self->sysdir;
+    $stack = [] unless defined $stack;
+
+    my %block;
+
+    for my $item (@{$block || []})
+    {
+        if (my $file = $item->{file})
+        {
+            if ($item->{directory} or $item->{'import'})
+            {
+                die "[$host: error] malformed file ($file) item with conflicting types\n";
+            }
+
+            if ($item->{source})
+            {
+                if ($item->{source} =~ /^\//)
+                {
+                    $item->{data} = $self->read_file_contents($item->{source}, must_exist => 1);
+                }
+                else # file is localized
+                {
+                    $item->{data} = $self->read_file_contents("$sysdir/$item->{source}", must_exist => 1);
+                }
+            }
+
+            my $owner = $self->get_host_user($host, $item->{owner});
+            my $group = $self->get_host_group($host, $item->{group});
+
+            if (not $owner)
+            {
+                die "[$host: error] Invalid owner ($item->{owner}) for $file\n";
+            }
+            if (not $group)
+            {
+                die "[$host: error] Invalid group ($item->{group}) for $file\n";
+            }
+            if (not $item->{mode})
+            {
+                die "[$host: error] Mode missing for $file\n";
+            }
+            $item->{uid} = $owner->{uid};
+            $item->{gid} = $group->{gid};
+
+            $block{$file} = $item;
+        }
+        elsif (my $directory = $item->{directory})
+        {
+            my $owner = $self->get_host_user($host, $item->{owner});
+            my $group = $self->get_host_group($host, $item->{group});
+
+            if (not $owner)
+            {
+                die "[$host: error] Invalid owner ($item->{owner}) for $file\n";
+            }
+            if (not $group)
+            {
+                die "[$host: error] Invalid group ($item->{group}) for $file\n";
+            }
+            $item->{uid} = $owner->{uid};
+            $item->{gid} = $group->{gid};
+
+            $block{$directory} = $item;
+        }
+        elsif (my $type = $item->{'import'})
+        {
+            if ($type eq 'host')
+            {
+                my $h = $item->{host};
+
+                if ($self->is_valid_host($h))
+                {
+                    my $fetch_host = Load($self->read_file_contents("$sysdir/hosts/$h.conf"));
+                    if (my $file_block = $fetch_host->{files})
+                    {
+                        if (grep { $_ eq "$sysdir/hosts/$h.conf" } @$stack)
+                        {
+                            die "[$host: error] recursion found importing host $h\n";
+                        }
+                        push @$stack, "$sysdir/hosts/$h.conf";
+                        my $remote_conf = $self->_process_file_block($file_block, $host, $stack);
+                        pop @$stack;
+
+                        %block = (%block, %$remote_conf);
+                    }
+                }
+                else
+                {
+                    die "[$host: error] invalid host ($h) used in import\n";
+                }
+            }
+            elsif ($type eq 'config')
+            {
+                my $source = $item->{config};
+                my $config;
+                if ($source =~ /^\//)
+                {
+                    $config = Load($self->read_file_contents($source, must_exist => 1));
+                }
+                else # file is localized
+                {
+                    $config = Load($self->read_file_contents("$sysdir/$source", must_exist => 1));
+                }
+                next unless $config;
+
+                if (my $file_block = $config->{files})
+                {
+                    if (grep { $_ eq $source } @$stack)
+                    {
+                        die "[$host: error] recursion found importing config $source\n";
+                    }
+
+                    push @$stack, $source;
+                    my $remote_conf = $self->_process_file_block($file_block, $host, $stack);
+                    pop @$stack;
+
+                    %block = (%block, %$remote_conf);
+                }
+            }
+        }
+
+    }
+
+    return \%block;
+}
+
 =head3 is_valid_host
 
 Returns true if host is valid.
@@ -289,6 +472,39 @@ sub must_refresh
     else
     {
         return -e "$stagedir/.refreshnow";
+    }
+}
+
+=head3 must_refresh_files
+
+Returns true if sysync must refresh managed files.
+
+Passing 1 or 0 as an argument sets whether this returns true.
+
+=cut
+
+sub must_refresh_files
+{
+    my $self = shift;
+    my $stagefilesdir = $self->stagefilesdir;
+
+    if (scalar @_ >= 1)
+    {
+        if ($_[0])
+        {
+            open(F, ">$stagefilesdir/.refreshnow");
+            close(F);
+            return 1;
+        }
+        else
+        {
+            unlink("$stagefilesdir/.refreshnow");
+            return 0;
+        }
+    }
+    else
+    {
+        return -e "$stagefilesdir/.refreshnow";
     }
 }
 

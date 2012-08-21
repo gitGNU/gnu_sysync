@@ -2,7 +2,7 @@ package Sysync;
 use strict;
 use Digest::MD5 qw(md5_hex);
 
-our $VERSION = '0.22';
+our $VERSION = '0.23';
 
 =head1 NAME
 
@@ -31,10 +31,11 @@ sub new
 {
     my ($class, $params) = @_;
     my $self = {
-        sysdir      => $params->{sysdir},
-        stagedir    => ($params->{stagedir} || "$params->{sysdir}/stage"),
-        salt_prefix => (exists($params->{salt_prefix}) ? $params->{salt_prefix} : '$6$'),
-        log         => $params->{log},
+        sysdir        => $params->{sysdir},
+        stagedir      => ($params->{stagedir}     || "$params->{sysdir}/stage"),
+        stagefilesdir => ($params->{stagefiledir} || "$params->{sysdir}/stage-files"),
+        salt_prefix   => (exists($params->{salt_prefix}) ? $params->{salt_prefix} : '$6$'),
+        log           => $params->{log},
     };
 
     bless($self, $class);
@@ -74,6 +75,14 @@ Returns stage directory.
 =cut
 
 sub stagedir { $_[0]->{stagedir} || join('/', $_[0]->sysdir, 'stage' ) }
+
+=head3 stagefilesdir
+
+Returns stage-files directory.
+
+=cut
+
+sub stagefilesdir { $_[0]->{stagefilesdir} || join('/', $_[0]->sysdir, 'stage-files' ) }
 
 =head3 get_user
 
@@ -155,6 +164,16 @@ Passing 1 or 0 as an argument sets whether this returns true.
 
 sub must_refresh { die 'needs implemented' }
 
+=head3 must_refresh_files
+
+Returns true if sysync must refresh managed files.
+
+Passing 1 or 0 as an argument sets whether this returns true.
+
+=cut
+
+sub must_refresh_files { die 'needs implemented' }
+
 =head3 generate_user_line
 
 Generate a line for both the user and shadow file.
@@ -218,6 +237,38 @@ Returns true if host is valid.
 
 sub is_valid_host { die 'needs implemented' }
 
+=head3 get_host_user
+
+Given a host, then a username, return a hashref with user details.
+
+=cut
+
+sub get_host_user
+{
+    my ($self, $host, $username) = @_;
+
+    my $data   = $self->get_host_users_groups($host);
+    my @users  = @{$data->{users} || []};
+
+    return (grep { $username eq $_->{username} } @users)[0];
+}
+
+=head3 get_host_group
+
+Given a host, then a group name, return a hashref with group details.
+
+=cut
+
+sub get_host_group
+{
+    my ($self, $host, $groupname) = @_;
+
+    my $data   = $self->get_host_users_groups($host);
+    my @groups = @{$data->{groups} || []};
+
+    return (grep { $groupname eq $_->{groupname} } @groups)[0];
+}
+
 =head3 get_host_ent
 
 For a generate all of the password data, including ssh keys, for a specific host.
@@ -263,6 +314,139 @@ sub get_host_ent
     };
 }
 
+=head3 get_host_files
+
+Generate a list of files with their content.
+
+ Returns hashref:
+ '/etc/filename.conf' => {
+    mode     => 600,
+    gid      => 0,
+    uid      => 0,
+    data     => ''
+    content => 'there are the contents',
+ }
+
+=cut
+
+sub get_host_files { die 'needs implemented' }
+
+=head3 update_all_hosts_files
+
+Iterate through every host and build files from specifications.
+
+=cut
+
+sub update_all_hosts_files
+{
+    my ($self, %params) = @_;
+
+    # get list of hosts along with image name
+    my $hosts = $params{hosts} || $self->get_all_hosts;
+
+    # first, build staging directories
+    my @hosts = keys %{ $hosts->{hosts} || {} };
+
+    my $stagedir = $self->stagefilesdir;
+
+    my $r = 0;
+
+    for my $host (@hosts)
+    {
+        next unless $self->is_valid_host($host);
+        my $files = $self->get_host_files($host);
+
+        unless (-d "$stagedir/$host")
+        {
+            mkdir "$stagedir/$host";
+            chmod 0755, "$stagedir/$host";
+            chown 0, 0, "$stagedir/$host";
+            $self->log("creating: $stagedir/$host");
+            $r++;
+        }
+
+        unless (-d "$stagedir/$host/etc")
+        {
+            mkdir "$stagedir/$host/etc";
+            chmod 0755, "$stagedir/$host/etc";
+            chown 0, 0, "$stagedir/$host/etc";
+            $self->log("creating: $stagedir/$host/etc");
+            $r++;
+        }
+
+        unless (-d "$stagedir/$host/etc/ssh")
+        {
+            mkdir "$stagedir/$host/etc/ssh";
+            chmod 0755, "$stagedir/$host/etc/ssh";
+            chown 0, 0, "$stagedir/$host/etc/ssh";
+            $self->log("creating: $stagedir/$host/etc/ssh");
+            $r++;
+        }
+
+        unless (-d "$stagedir/$host/etc/ssh/authorized_keys")
+        {
+            mkdir "$stagedir/$host/etc/ssh/authorized_keys";
+            chmod 0755, "$stagedir/$host/etc/ssh/authorized_keys";
+            chown 0, 0, "$stagedir/$host/etc/ssh/authorized_keys";
+            $self->log("creating: $stagedir/$host/etc/ssh/authorized_keys");
+            $r++;
+        }
+
+        for my $path (keys %{ $files || {} })
+        {
+            my $item = $files->{$path};
+            next unless $item->{directory};
+
+            $item->{directory} =~ s/\/$//;
+
+            next if $item->{directory} eq '/etc';
+            next if $item->{directory} eq '/etc/ssh';
+            next if $item->{directory} eq '/etc/ssh/authorized_keys';
+
+            $item->{directory} =~ s/^\///;
+            
+            mkdir "$stagedir/$host/$item->{directory}"
+                unless -d "$stagedir/$host/$item->{directory}";
+
+            my $mode = sprintf("%04i", $item->{mode});
+            chmod $mode, "$stagedir/$host/$item->{directory}";
+            chown $item->{uid}, $item->{gid}, "$stagedir/$host/$item->{directory}";
+            $self->log("creating: $stagedir/$host/$item->{directory}");
+            $r++;
+        }
+
+        for my $path (keys %{ $files || {} })
+        {
+            my $item = $files->{$path};
+            next unless $item->{file};
+
+            my @path_parts = split('/', $item->{file});
+
+            my $filename   = pop @path_parts;
+            my $parent_dir = join('/', @path_parts);
+
+            $item->{file} =~ s/^\///;
+
+            unless (-d "$stagedir/$host/$parent_dir")
+            {
+                die "[$host: error] directory $parent_dir not defined for $item->{file}\n";
+            }
+
+            if ($self->write_file_contents("$stagedir/$host/$item->{file}", $item->{data}))
+            {
+                $r++;
+            }
+
+            my $mode = sprintf("%04i", $item->{mode});
+
+            chmod oct($mode), "$stagedir/$host/$item->{file}";
+            chown $item->{uid}, $item->{gid}, "$stagedir/$host/$item->{file}";
+        }
+
+        return $r;
+    }
+}
+
 =head3 update_all_hosts
 
 Iterate through every host and build password files.
@@ -292,7 +476,7 @@ sub update_all_hosts
             mkdir "$stagedir/$host";
             chmod 0755, "$stagedir/$host";
             chown 0, 0, "$stagedir/$host";
-            $self->log("Creating $stagedir/$host");
+            $self->log("creating: $stagedir/$host");
             $r++;
         }
 
@@ -301,7 +485,7 @@ sub update_all_hosts
             mkdir "$stagedir/$host/etc";
             chmod 0755, "$stagedir/$host/etc";
             chown 0, 0, "$stagedir/$host/etc";
-            $self->log("Creating $stagedir/$host/etc");
+            $self->log("creating: $stagedir/$host/etc");
             $r++;
         }
 
@@ -310,7 +494,7 @@ sub update_all_hosts
             mkdir "$stagedir/$host/etc/ssh";
             chmod 0755, "$stagedir/$host/etc/ssh";
             chown 0, 0, "$stagedir/$host/etc/ssh";
-            $self->log("Creating $stagedir/$host/etc/ssh");
+            $self->log("creating: $stagedir/$host/etc/ssh");
             $r++;
         }
 
@@ -319,7 +503,7 @@ sub update_all_hosts
             mkdir "$stagedir/$host/etc/ssh/authorized_keys";
             chmod 0755, "$stagedir/$host/etc/ssh/authorized_keys";
             chown 0, 0, "$stagedir/$host/etc/ssh/authorized_keys";
-            $self->log("Creating $stagedir/$host/etc/ssh/authorized_keys");
+            $self->log("creating: $stagedir/$host/etc/ssh/authorized_keys");
             $r++;
         }
 
@@ -400,7 +584,10 @@ sub write_file_contents
 
 sub read_file_contents
 {
-    my ($self, $file) = @_;
+    my ($self, $file, %params) = @_;
+
+    die "error: $file does not exist\n"
+        if $params{must_exist} and not -f $file;
 
     open(my $fh, $file);
     my @content = <$fh>;
