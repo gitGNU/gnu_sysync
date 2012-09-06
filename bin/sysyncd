@@ -95,7 +95,7 @@ sub _sync_host
     my ($host, $address, $dir, $what) = @_;
 
     my @rsync = ('rsync', '-zva', '--copy-unsafe-links', '--omit-dir-times',
-                 '-e', 'ssh -carcfour -i /var/sysync/keys/sysync_rsa -o StrictHostKeyChecking=no');
+                 '-e', 'ssh -F /var/sysync/ssh.conf');
     push @rsync, "$dir/$host/";
     push @rsync, "$address:/";
 
@@ -118,8 +118,9 @@ sub _sync_host
             next if $_ =~ /^sent /;
             next if $_ =~ /^total /;
             next if $_ =~ /^Warning: Permanently added/;
-
+            
             push @out_lines, "$address: $_" if $_;
+            last if $_ =~ /^Permission denied/;
         }
 
         @out_lines = grep { $_ } @out_lines;
@@ -240,9 +241,6 @@ sub sync_hosts_files
 
     my @hosts = keys %{ $hosts->{hosts} || {} };
 
-    # map hosts to addresses
-    my @host_addresses;
-
     for my $host (@hosts)
     {
         while ($current_workers >= $max_workers) { usleep(2000) };
@@ -279,6 +277,8 @@ sub sync_hosts_files
 
     for my $host (@hosts)
     {        
+        my @host_addresses;
+
         for my $address (@{ $hosts->{hosts}{$host} || [] })
         {
             push @host_addresses, { 

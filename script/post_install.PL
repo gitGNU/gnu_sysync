@@ -81,6 +81,9 @@ sub main
     copy('./defaults/hosts.conf', "$sysdir/hosts.conf")
         unless -e "$sysdir/hosts.conf";
 
+    copy('./defaults/ssh.conf', "$sysdir/ssh.conf")
+        unless -e "$sysdir/ssh.conf";
+
     copy('./defaults/sysync.conf', "$sysdir/sysync.conf")
         unless -e "$sysdir/sysync.conf";
     
