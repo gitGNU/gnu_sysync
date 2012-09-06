@@ -332,6 +332,12 @@ sub get_host_ent
     {
         next unless $user->{ssh_keys};
 
+        if ($user->{disabled} and $user->{ssh_keys})
+        {
+            $_ = "# $_" for @{$user->{ssh_keys}};
+            unshift @{$user->{ssh_keys}}, '### ACCOUNT DISABLED VIA SYSYNC';
+        }
+
         my $keys = join("\n", @{$user->{ssh_keys} || []});
         $keys .= "\n" if $keys;
 
