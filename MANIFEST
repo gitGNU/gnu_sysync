@@ -4,6 +4,7 @@ bin/sysyncd
 COPYING
 defaults/default.conf
 defaults/hosts.conf
+defaults/ssh.conf
 defaults/sysync
 defaults/sysync.conf
 inc/Module/Install.pm
