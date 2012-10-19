@@ -4,7 +4,7 @@ use Digest::MD5 qw(md5_hex);
 use File::Find;
 use File::Path;
 
-our $VERSION = '0.28';
+our $VERSION = '0.29';
 
 =head1 NAME
 
@@ -659,7 +659,10 @@ sub write_file_contents
 
     $self->log("writing: $file");
 
-    unlink($file) or die $!;
+    if (-e $file)
+    {
+        unlink($file) or die $!;
+    }
 
     open(F, "> $file") or die $!;
     print F $data;
