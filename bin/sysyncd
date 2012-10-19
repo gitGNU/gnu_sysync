@@ -42,12 +42,14 @@ open(LOG, ">/dev/null");
 
 my $no_passwd_control = 0;
 
+my $config = {};
+
 sub main
 {
     # grab options
     my $options = _parse_options();
     
-    my $config  =
+    $config  =
         Load(Sysync->read_file_contents($options->{config} || '/var/sysync/sysync.conf'));
 
     $no_passwd_control = 1
@@ -94,10 +96,21 @@ sub _sync_host
 {
     my ($host, $address, $dir, $what) = @_;
 
-    my @rsync = ('rsync', '-zva', '--copy-unsafe-links', '--omit-dir-times',
-                 '-e', 'ssh -F /var/sysync/ssh.conf');
+    my $extra_ssh_params = '';
+
+    # default to root
+    my $sync_as_user = $config->{sync_as_user} || 'root';
+
+    my @extra_params;
+    if ($sync_as_user and $sync_as_user ne 'root')
+    {
+        push @extra_params, '--rsync-path', 'sudo rsync';
+    }
+
+    my @rsync = ('rsync', '-zva', '--copy-unsafe-links', '--omit-dir-times', '--numeric-ids',
+                 '-e', "ssh -F /var/sysync/ssh.conf", @extra_params);
     push @rsync, "$dir/$host/";
-    push @rsync, "$address:/";
+    push @rsync, "$sync_as_user\@$address:/";
 
     my $r = _system(@rsync);
 
