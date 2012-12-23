@@ -209,6 +209,7 @@ sub daemon
     }
 
     open(LOG, ">>/var/log/sysync.log") unless $ENV{DEBUG};
+    *STDERR = *LOG unless $ENV{DEBUG};
 
     _log("Starting sysync daemon.");
 
