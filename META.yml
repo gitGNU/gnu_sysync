@@ -34,4 +34,4 @@ resources:
   homepage: http://sysync.nongnu.org
   license: http://www.gnu.org/licenses/agpl-3.0.html
   repository: git://git.savannah.nongnu.org/sysync.git
-version: 0.30
+version: 0.31
