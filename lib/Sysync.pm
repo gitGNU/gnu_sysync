@@ -225,10 +225,19 @@ Generate a line for the group file.
 
 sub generate_group_line
 {
-    my ($self, $group) = @_;
+    my ($self, $group, $what) = @_;
 
     my $users = join(',', @{$group->{users} || []}) || '';
-    return join(':', $group->{groupname}, 'x', $group->{gid}, $users);
+
+    my $line = '';
+    if ($what eq 'group')
+    {
+        $line = join(':', $group->{groupname}, 'x', $group->{gid}, $users);
+    }
+    elsif ($what eq 'gshadow')
+    {
+        $line = sprintf('%s:*::%s', $group->{groupname}, $users);
+    }
 }
 
 =head3 is_valid_host
@@ -325,7 +334,8 @@ sub get_host_ent
 
     my $passwd = join("\n", map { $self->generate_user_line($_, 'passwd') } @users) . "\n";
     my $shadow = join("\n", map { $self->generate_user_line($_, 'shadow') } @users) . "\n";
-    my $group  = join("\n", map { $self->generate_group_line($_) } @groups) . "\n";
+    my $group  = join("\n", map { $self->generate_group_line($_, 'group',) } @groups) . "\n";
+    my $gshadow  = join("\n", map { $self->generate_group_line($_, 'gshadow',) } @groups) . "\n";
 
     my @ssh_keys;
     for my $user (@users)
@@ -354,6 +364,7 @@ sub get_host_ent
         passwd   => $passwd,
         shadow   => $shadow,
         group    => $group,
+        gshadow  => $gshadow,
         ssh_keys => \@ssh_keys,
     };
 }
@@ -634,7 +645,14 @@ sub update_all_hosts
             chown 0, 42, "$stagedir/$host/etc/shadow";
             $r++;
         }
-    }
+ 
+       if ($self->write_file_contents("$stagedir/$host/etc/gshadow", $ent_data->{gshadow}))
+        {
+            chmod 0640, "$stagedir/$host/etc/gshadow";
+            chown 0, 42, "$stagedir/$host/etc/gshadow";
+            $r++;
+        }
+   }
 
     return $r;
 }
