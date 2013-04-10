@@ -4,7 +4,7 @@ use Digest::MD5 qw(md5_hex);
 use File::Find;
 use File::Path;
 
-our $VERSION = '0.31';
+our $VERSION = '0.32';
 
 =head1 NAME
 
