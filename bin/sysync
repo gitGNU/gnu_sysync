@@ -594,6 +594,88 @@ sub main
 
         print _custom_yaml_end_dump($ent_data);
     }
+    elsif (my $hostpackage = $options->{'diff'} and ref $sysync eq 'Sysync::File')
+    {
+        die "Host must be specified\n" if $hostpackage eq '1';
+
+        my $host = $options->{'remote-host'};
+        die "Remote host must be specified\n" if not $host or $host eq '1';
+
+        die "Invalid host: $hostpackage\n"
+            unless $sysync->is_valid_host($hostpackage);
+
+        my $r;
+        
+        $r = _system('ssh', '-F', '/var/sysync/ssh.conf', "root\@${host}", 'hostname');
+
+        if ($r->{stdout} =~ /^Permission denied/)
+        {
+            die "Cannot access $host\n";
+        }
+
+        $r = _system('ssh', '-F', '/var/sysync/ssh.conf', "root\@${host}", 'cat /etc/passwd');
+        my $passwd = $r->{stdout};
+
+        $r = _system('ssh', '-F', '/var/sysync/ssh.conf', "root\@${host}", 'cat /etc/shadow');
+        my $shadow = $r->{stdout};
+
+        $r = _system('ssh', '-F', '/var/sysync/ssh.conf', "root\@${host}", 'cat /etc/group');
+        my $group = $r->{stdout};
+
+        my $ent_data = _process_ent_files(
+            passwd => $passwd,
+            shadow => $shadow,
+            group  => $group,
+        );
+
+        my $warnings = '';
+        my %new_ent_info;
+
+        my $existing_host_ent = $sysync->get_host_users_groups($hostpackage);
+
+        for my $user (@{ $ent_data->{users} || [ ] })
+        {
+            my ($existing) = grep { $_->{username} eq $user->{username} }
+                @{ $existing_host_ent->{users} || [ ] };
+    
+            if ($existing and
+                $existing->{uid} != $user->{uid})
+            {
+                $warnings .= "UID change for user $user->{username} from uid $existing->{uid} to $user->{uid}\n";
+            }
+
+            unless ($existing)
+            {
+                $new_ent_info{users} = [] unless defined $new_ent_info{users};
+                push @{$new_ent_info{users}}, $user;
+            }
+        }
+
+        for my $group (@{ $ent_data->{groups} || [ ] })
+        {
+            my ($existing) = grep { $_->{groupname} eq $group->{groupname} }
+                @{ $existing_host_ent->{groups} || [ ] };
+    
+            if ($existing and
+                $existing->{gid} != $group->{gid})
+            {
+                $warnings .= "GID change for group $group->{groupname} from uid $existing->{gid} to $group->{gid}\n";
+            }
+
+            unless ($existing)
+            {
+                $new_ent_info{groups} = [] unless defined $new_ent_info{groups};
+                push @{$new_ent_info{groups}}, $group;
+            }
+        }
+
+        print $warnings;
+
+        if (%new_ent_info)
+        {
+            print _custom_yaml_end_dump(\%new_ent_info, { new => 1 });
+        }
+    }
     elsif ($options->{help})
     {
         usage();
@@ -608,8 +690,9 @@ sub main
 
 sub _custom_yaml_end_dump
 {
-    my $config = shift;
-    my $out = "users:\n";
+    my ($config, $params) = @_;
+
+    my $out = ($params->{new} ? "new users:\n" : "users:\n");
 
     @{$config->{users}} = sort {
         ($a->{password} && $a->{uid} != 0)
@@ -640,7 +723,7 @@ sub _custom_yaml_end_dump
         }
     }
 
-    $out .= "groups:\n";
+    $out .= ($params->{new} ? "new groups:\n" : "groups:\n");
     for my $group (@{$config->{groups}})
     {
         if ($group->{users})
@@ -879,6 +962,8 @@ sub _parse_options
         push-files
         push-auth
         import-host
+        remote-host
+        diff
     );
 
     my @OPTS = @ARGV;
@@ -996,6 +1081,7 @@ sub usage
         warn "   --delhost=[host]\n";
         warn "   --edithosts (edit hosts.conf file)\n";
         warn "   --import-host=[hostname] (returns YAML dump of data from remote host)\n";
+        warn "   --diff=[host] --remote-host=[remote address]\n";
     }
 
 }
