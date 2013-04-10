@@ -366,6 +366,7 @@ sub get_host_ent
         group    => $group,
         gshadow  => $gshadow,
         ssh_keys => \@ssh_keys,
+        data     => $data,
     };
 }
 
@@ -625,6 +626,13 @@ sub update_all_hosts
             }
         }
 
+        my ($shadow_group) =
+            grep { $_->{groupname} eq 'shadow' }
+                @{ $ent_data->{data}{groups} || [ ] };
+
+        $shadow_group = {} unless defined $shadow_group;
+        $shadow_group = $shadow_group->{gid} || 0;
+
         if ($self->write_file_contents("$stagedir/$host/etc/passwd", $ent_data->{passwd}))
         {
             chmod 0644, "$stagedir/$host/etc/passwd";
@@ -642,14 +650,14 @@ sub update_all_hosts
         if ($self->write_file_contents("$stagedir/$host/etc/shadow", $ent_data->{shadow}))
         {
             chmod 0640, "$stagedir/$host/etc/shadow";
-            chown 0, 42, "$stagedir/$host/etc/shadow";
+            chown 0, $shadow_group, "$stagedir/$host/etc/shadow";
             $r++;
         }
  
        if ($self->write_file_contents("$stagedir/$host/etc/gshadow", $ent_data->{gshadow}))
         {
             chmod 0640, "$stagedir/$host/etc/gshadow";
-            chown 0, 42, "$stagedir/$host/etc/gshadow";
+            chown 0, $shadow_group, "$stagedir/$host/etc/gshadow";
             $r++;
         }
    }
