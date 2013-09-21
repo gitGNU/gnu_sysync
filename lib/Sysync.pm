@@ -4,7 +4,7 @@ use Digest::MD5 qw(md5_hex);
 use File::Find;
 use File::Path;
 
-our $VERSION = '0.33';
+our $VERSION = '0.34';
 
 =head1 NAME
 
@@ -722,11 +722,11 @@ sub read_file_contents
 
 =head1 COPYRIGHT
 
-2012 Ohio-Pennsylvania Software, LLC.
+L<Bizowie|http://bizowie.com/>
 
 =head1 LICENSE
 
- Copyright (C) 2012 Ohio-Pennsylvania Software, LLC.
+ Copyright (C) 2012, 2013 Bizowie
 
  This file is part of Sysync.
  
